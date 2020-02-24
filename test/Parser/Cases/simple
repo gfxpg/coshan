@@ -1,1 +1,10 @@
-Listing []
+Listing
+  [ Directive "text"                    ""
+  , Directive "hsa_code_object_version" "2,1"
+  , Directive "hsa_code_object_isa"     "9,0,0,\"AMD\",\"AMDGPU\""
+  , Directive "weak"                    "_Z10cond_writePfPKff"
+  , Directive "p2align"                 "8"
+  , Directive "type"                    "_Z10cond_writePfPKff,@function"
+  , Directive "amdgpu_hsa_kernel"       "_Z10cond_writePfPKff"
+  ]
+  []

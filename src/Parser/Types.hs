@@ -1,6 +1,9 @@
 module Parser.Types where
 
-newtype Listing = Listing [Instruction]
+data Listing = Listing [Directive] [Instruction]
+  deriving (Eq, Show, Read)
+
+data Directive = Directive String String
   deriving (Eq, Show, Read)
 
 data Instruction = Instruction String [Operand]
