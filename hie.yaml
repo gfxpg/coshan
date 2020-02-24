@@ -1,0 +1,8 @@
+cradle:
+  stack:
+    - path: ./test
+      component: "hane:test:hane-test"
+    - path: ./src
+      component: "hane:lib"
+    - path: ./app
+      component: "hane:exe:hane-exe"

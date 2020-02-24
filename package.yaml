@@ -1,0 +1,40 @@
+name: hane
+version: 0.1.0.0
+github: "timlathy/hane"
+author: tim
+
+extra-source-files:
+- README.md
+
+description: Please see the README on GitHub at <https://github.com/timlathy/hane#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- megaparsec
+
+library:
+  source-dirs: src
+
+executables:
+  hane-exe:
+    main: Main.hs
+    source-dirs: app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - hane
+
+tests:
+  hane-test:
+    main: Spec.hs
+    source-dirs: test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - hane
+    - hspec
+    - hspec-megaparsec
