@@ -1,9 +1,11 @@
 module Parser.Types where
 
-data Listing = Listing [Directive] [Instruction]
+import           Data.Map.Strict                ( Map(..) )
+
+data Listing = Listing KernelCodeT [Instruction]
   deriving (Eq, Show, Read)
 
-data Directive = Directive String String
+newtype KernelCodeT = KernelCodeT (Map String Int)
   deriving (Eq, Show, Read)
 
 data Instruction = Instruction String [Operand]
