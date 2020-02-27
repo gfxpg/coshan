@@ -1,6 +1,10 @@
 module Parser.Types where
 
 import           Data.Map.Strict                ( Map(..) )
+import           Data.Void
+import           Text.Megaparsec
+
+type Parser = Parsec Void String
 
 data Listing = Listing KernelCodeT [Instruction]
   deriving (Eq, Show, Read)
