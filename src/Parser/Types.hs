@@ -8,13 +8,15 @@ data Listing = Listing KernelCodeT [Instruction]
 newtype KernelCodeT = KernelCodeT (Map String Int)
   deriving (Eq, Show, Read)
 
-data Instruction = Instruction String [Operand]
+data Instruction = AsmInstr String [Operand]
+                 | AsmLabel String
   deriving (Eq, Show, Read)
 
 data Operand = OpSGPR [Int]
              | OpVGPR [Int]
              | OpVCC
              | OpSCC
+             | OpExec
              | OpConst Int
              | OpSys String
   deriving (Eq, Show, Read)

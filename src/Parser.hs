@@ -48,29 +48,29 @@ asmLabel :: Parser String
 asmLabel = lexeme (takeWhile1P (Just "label") (/= ':') <* char ':')
 
 instruction :: Parser Instruction
-instruction = lexeme $ Instruction <$> identToken <*> operands
+instruction = lexeme $ do
+    ident <- identToken
+    choice [label ident, AsmInstr ident <$> operands]
   where
+    label name = char ':' *> pure (AsmLabel name)
     operands = many (option ',' (char ',') *> tabSpaces1 *> instructionOperand)
 
 instructionOperand :: Parser Operand
 instructionOperand = choice
     [ string "scc" *> pure OpSCC
     , string "vcc" *> pure OpVCC
+    , string "exec" *> pure OpExec
     , char 's' *> (OpSGPR <$> regs)
-    , char 'v' *> (OpSGPR <$> regs)
+    , char 'v' *> (OpVGPR <$> regs)
     , char '0' *> char 'x' *> (OpConst <$> L.hexadecimal)
     , OpConst <$> L.decimal
-    , OpSys <$> takeWhile1P (Just "operand") (\c -> c /= ' ' && c /= '\n')
+    , OpSys <$> takeWhile1P (Just "operand") (\c -> c /= ',' && c /= '\n')
     ]
   where
     regs :: Parser [Int]
     regs = choice [char '[' *> range <* char ']', pure <$> L.decimal]
     range :: Parser [Int]
-    range = do
-        from <- L.decimal
-        char ':'
-        to <- L.decimal
-        pure [from .. to]
+    range = enumFromTo <$> L.decimal <* char ':' <*> L.decimal
 
 --
 
