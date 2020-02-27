@@ -13,6 +13,8 @@ data Instruction = Instruction String [Operand]
 
 data Operand = OpSGPR [Int]
              | OpVGPR [Int]
+             | OpVCC
+             | OpSCC
              | OpConst Int
              | OpSys String
   deriving (Eq, Show, Read)

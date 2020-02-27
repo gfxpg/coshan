@@ -25,12 +25,9 @@ asmlst = lst <* eof
 
 lst :: Parser Listing
 lst = do
-    space
-    skipMany directive
-    asmLabel -- skip entry label
-    kcode <- kernelCodeT
-    takeRest
-    pure (Listing kcode [])
+    -- skip directives and kernel entry label
+    space *> skipMany directive *> asmLabel
+    Listing <$> kernelCodeT <*> some instruction <* takeRest
 
 directive :: Parser (String, String)
 directive = (,) <$> directiveKey <*> option "" directiveValue
@@ -42,18 +39,43 @@ directive = (,) <$> directiveKey <*> option "" directiveValue
 kernelCodeT :: Parser KernelCodeT
 kernelCodeT = do
     symbol ".amd_kernel_code_t"
-    directives <- some kvPair
+    directives <- some $ (,) <$> key <*> signedInt
     symbol ".end_amd_kernel_code_t"
     pure $ KernelCodeT $ Map.fromList directives
-    where kvPair = (,) <$> (ident <* lexeme (char '=')) <*> signedInt
+    where key = lexeme identToken <* lexeme (char '=')
 
 asmLabel :: Parser String
 asmLabel = lexeme (takeWhile1P (Just "label") (/= ':') <* char ':')
 
+instruction :: Parser Instruction
+instruction = lexeme $ Instruction <$> identToken <*> operands
+  where
+    operands = many (option ',' (char ',') *> tabSpaces1 *> instructionOperand)
+
+instructionOperand :: Parser Operand
+instructionOperand = choice
+    [ string "scc" *> pure OpSCC
+    , string "vcc" *> pure OpVCC
+    , char 's' *> (OpSGPR <$> regs)
+    , char 'v' *> (OpSGPR <$> regs)
+    , char '0' *> char 'x' *> (OpConst <$> L.hexadecimal)
+    , OpConst <$> L.decimal
+    , OpSys <$> takeWhile1P (Just "operand") (\c -> c /= ' ' && c /= '\n')
+    ]
+  where
+    regs :: Parser [Int]
+    regs = choice [char '[' *> range <* char ']', pure <$> L.decimal]
+    range :: Parser [Int]
+    range = do
+        from <- L.decimal
+        char ':'
+        to <- L.decimal
+        pure [from .. to]
+
 --
 
-ident :: Parser String
-ident = lexeme (lookAhead letterChar *> takeWhile1P (Just "ident") snakeIdent)
+identToken :: Parser String
+identToken = lookAhead letterChar *> takeWhile1P (Just "ident") snakeIdent
     where snakeIdent c = Char.isAlphaNum c || c == '_'
 
 signedInt :: Parser Int
