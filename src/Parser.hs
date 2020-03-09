@@ -55,7 +55,8 @@ instructionOperand = choice
     , string "exec" *> pure OpExec
     , char 's' *> (OpSGPR <$> regs)
     , char 'v' *> (OpVGPR <$> regs)
-    , char '0' *> char 'x' *> (OpConst <$> L.hexadecimal)
+    , string "0x" *> (OpConst <$> L.hexadecimal)
+    , char '-' *> (OpConst . (* (-1)) <$> L.decimal)
     , OpConst <$> L.decimal
     , OpSys <$> takeWhile1P (Just "operand") (\c -> c /= ',' && c /= '\n')
     ]

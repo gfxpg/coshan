@@ -6,4 +6,5 @@ import           Helper                         ( runParserCase )
 
 spec :: Spec
 spec = describe "parser" $ do
-  it "handles a simple case" $ runParserCase "simple"
+  it "handles a simple if construct" $ runParserCase "simple-if"
+  it "handles a simple for construct" $ runParserCase "simple-for"
