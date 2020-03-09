@@ -10,11 +10,11 @@ import           Parser.Types                   ( Instruction(..)
 
 -- label, instructions
 data BasicBlock = BasicBlock String [Instruction]
-  deriving (Show)
+  deriving (Eq, Show, Read)
 
 data BlockEdge = BlockEdgeT String String
                | BlockEdgeF String String
-  deriving (Show)
+  deriving (Eq, Show, Read)
 
 type CFG = ([BasicBlock], [BlockEdge])
 

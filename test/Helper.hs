@@ -1,11 +1,27 @@
 module Helper where
 
-import           Test.Hspec                     ( Expectation(..) )
+import           Parser                         ( asmlst
+                                                , Listing(..)
+                                                )
+import           ControlFlow                    ( constructGraph )
+import           Test.Hspec                     ( Expectation(..)
+                                                , shouldBe
+                                                )
 import           Text.Megaparsec                ( Parsec(..)
                                                 , ShowErrorComponent(..)
                                                 , parse
                                                 )
 import           Test.Hspec.Megaparsec
+
+runControlFlowCase :: String -> Expectation
+runControlFlowCase casefile = do
+  input    <- readFile inputPath
+  expected <- read <$> readFile outputPath
+  let Right (Listing _ instructions) = parse asmlst casefile input
+  constructGraph instructions `shouldBe` expected
+ where
+  outputPath = "test/ControlFlow/Cases/" ++ casefile
+  inputPath  = outputPath ++ ".isa"
 
 runParserCase
   :: (Read s, Show s, Eq s)
