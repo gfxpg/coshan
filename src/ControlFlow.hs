@@ -14,6 +14,7 @@ data BasicBlock = BasicBlock String [Instruction]
 
 data BlockEdge = BlockEdgeT String String
                | BlockEdgeF String String
+               | BlockEdgeUnc String String
   deriving (Eq, Show, Read)
 
 type CFG = ([BasicBlock], [BlockEdge])
@@ -24,13 +25,15 @@ constructGraph = scanBlocks ([], []) 0
 scanBlocks :: CFG -> Int -> [Instruction] -> CFG
 scanBlocks (blocks, edges) i insts = case scanBasicBlock i insts of
   (block, []  ) -> (block : blocks, edges)
-  (block, rest) -> (block : newBlocks, e1 : e0 : edges)
+  (block, rest) -> (block : newBlocks, allEdges)
    where
-    (newBlocks, newEdges)     = scanBlocks (blocks, edges) (i + 1) rest
-    e1                        = BlockEdgeT bbName $ branchLabel $ last bbInsts
-    e0                        = BlockEdgeF bbName $ blockName $ i + 1
-    BasicBlock bbName bbInsts = block
-    branchLabel (AsmInstr _ [OpSys label]) = label
+    (newBlocks, newEdges) = scanBlocks (blocks, edges) (i + 1) rest
+    allEdges              = case last bbInsts of
+      (AsmInstr _ [OpSys branchName]) ->
+        BlockEdgeT bbName branchName : BlockEdgeF bbName nextBbName : newEdges
+      _ -> BlockEdgeUnc bbName nextBbName : newEdges
+    BasicBlock nextBbName _ :      _       = newBlocks
+    BasicBlock              bbName bbInsts = block
 
 scanBasicBlock :: Int -> [Instruction] -> (BasicBlock, [Instruction])
 scanBasicBlock id insts = (BasicBlock name block, rest)
