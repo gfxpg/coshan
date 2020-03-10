@@ -1,5 +1,8 @@
 module ControlFlow
   ( constructGraph
+  , BasicBlock(..)
+  , BlockEdge(..)
+  , CFG
   )
 where
 
