@@ -1,6 +1,7 @@
 module Analysis.RegisterLifetimeSpec where
 
 import           Test.Hspec
+import qualified Data.Set                      as Set
 import qualified Data.Map.Strict               as Map
 import           Helper                         ( runControlFlowCase )
 import           Parser                         ( Instruction(..)
@@ -51,4 +52,28 @@ spec = describe "register lifetime analysis" $ do
           ]
         )
     let util = analyzeUtilization cfg
-    util `shouldBe` Map.empty
+    util `shouldBe` Map.fromList
+      [ ( "BB0"
+        , Set.fromList
+          [SGPRWr 0, SGPRWr 1, SGPRWr 2, SGPRWr 3, SGPRRd 4, SGPRRd 5]
+        )
+      , ("BB1", Set.fromList [VGPRWr 0])
+      , ( "BB1_2"
+        , Set.fromList
+          [ SGPRWr 0
+          , SGPRWr 1
+          , SGPRWr 2
+          , SGPRWr 3
+          , SGPRWr 4
+          , VGPRWr 1
+          , VGPRWr 2
+          , VGPRWr 3
+          , SGPRRd 0
+          , SGPRRd 1
+          , SGPRRd 2
+          , SGPRRd 3
+          , VGPRRd 0
+          ]
+        )
+      , ("BB1_3", Set.empty)
+      ]
