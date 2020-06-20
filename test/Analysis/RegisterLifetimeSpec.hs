@@ -11,7 +11,7 @@ import           ControlFlow
 import           Analysis.RegisterLifetime
 
 spec :: Spec
-spec = describe "register lifetime analysis" $ do
+spec = describe "register lifetime analysis" $
   it "builds a map of register utilization" $ do
     let
       cfg =
@@ -68,10 +68,6 @@ spec = describe "register lifetime analysis" $ do
           , VGPRWr 1
           , VGPRWr 2
           , VGPRWr 3
-          , SGPRRd 0
-          , SGPRRd 1
-          , SGPRRd 2
-          , SGPRRd 3
           , VGPRRd 0
           ]
         )

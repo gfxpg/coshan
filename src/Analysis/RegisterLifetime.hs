@@ -46,8 +46,12 @@ blockUtilization insts = reads (writes Set.empty insts) insts
   -- need to look at each one to determine register reads
   -- if a register has been written to before in this basic block,
   -- we do not consider it to be a read dependency
-  readsOp us (OpSGPR (r : rest)) | SGPRWr r `Set.member` us = us
-                                 | otherwise = Set.insert (SGPRRd r) us
-  readsOp us (OpVGPR (r : rest)) | VGPRWr r `Set.member` us = us
-                                 | otherwise = Set.insert (VGPRRd r) us
+  readsOp us (OpSGPR (r : rest)) = readsOp newUs (OpSGPR rest)
+   where
+    newUs | SGPRWr r `Set.member` us = us
+          | otherwise                = Set.insert (SGPRRd r) us
+  readsOp us (OpVGPR (r : rest)) = readsOp newUs (OpVGPR rest)
+   where
+    newUs | VGPRWr r `Set.member` us = us
+          | otherwise                = Set.insert (VGPRRd r) us
   readsOp us _ = us
