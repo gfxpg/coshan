@@ -13,6 +13,8 @@ dependencies:
 - mtl
 - megaparsec
 - containers
+- bytestring
+- elf
 
 library:
   source-dirs: src

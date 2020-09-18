@@ -1,32 +1,25 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
-module Disassembler where
+module Disassembler (readElf, module Disassembler.Types) where
 
-import Foreign.Ptr
-import Foreign.ForeignPtr
-import Foreign.C.String
-import Foreign.C.Types
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as BStr
+import qualified Data.Elf as E
+import Data.List (find)
+import Disassembler.LLVM
+import Disassembler.Types
 
-type LLVMDisasmContextRef = ForeignPtr ()
-type LLVMDisasmContextRefRaw = Ptr ()
-type UnusuedRef = Ptr ()
+import Debug.Trace (trace)
 
-foreign import ccall "llvm-c/Target.h LLVMInitializeAllTargetInfos"
-  llvmInitializeAllTargetInfos :: IO ()
-
-foreign import ccall "llvm-c/Disassembler.h LLVMCreateDisasmCPU"
-  llvmCreateDisasmCPU :: CString -> CString -> UnusuedRef -> CInt -> UnusuedRef -> UnusuedRef -> IO LLVMDisasmContextRefRaw
-
-foreign import ccall "llvm-c/Disassembler.h &LLVMDisasmDispose"
-  llvmDisasmDispose :: FunPtr (LLVMDisasmContextRefRaw -> IO ())
-
-data DisasmTarget = DisasmTarget { disasmTriple :: String, diasasmCPU :: String }
-
-init :: DisasmTarget -> IO LLVMDisasmContextRef
-init target = do
-  llvmInitializeAllTargetInfos
-  triple <- newCString $ disasmTriple target
-  cpu <- newCString $ diasasmCPU target
-  ctxRefRaw <- llvmCreateDisasmCPU triple cpu nullPtr 0 nullPtr nullPtr
-  ctxRef <- newForeignPtr llvmDisasmDispose ctxRefRaw
-  pure $ ctxRef
+readElf :: DisasmTarget -> ByteString -> IO Disassembly
+readElf target bin = do
+  llvmRef <- getLlvmRef target
+  disasmInstructions <- disassemble llvmRef disasmInstructionsBin
+  pure $ Disassembly {disasmKernelCode, disasmInstructionsBin, disasmInstructions}
+  where
+    (disasmKernelCode, disasmInstructionsBin) = BStr.splitAt 256 elfTextBin
+    elfTextBin = E.elfSectionData elfText
+    elfText = case find ((== ".text") . E.elfSectionName) (E.elfSections elf) of
+      Just section -> section
+      Nothing -> error (trace (show $ E.elfSections elf) "No .text section found in ELF file")
+    elf = E.parseElf bin
