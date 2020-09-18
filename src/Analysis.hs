@@ -9,8 +9,6 @@ import Control.Monad
 import Data.List (elem, intercalate)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.TypeRepMap (TypeRepMap)
-import qualified Data.TypeRepMap as TRMap
 import Data.Typeable (Proxy (..), TypeRep, Typeable, typeRep)
 import Debug.Trace (trace)
 import GHC.Base (Any)

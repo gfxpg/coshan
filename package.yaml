@@ -13,7 +13,6 @@ dependencies:
 - mtl
 - megaparsec
 - containers
-- typerep-map
 
 library:
   source-dirs: src
