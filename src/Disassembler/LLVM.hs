@@ -44,7 +44,7 @@ getLlvmRef target = do
   ctxRef <- newForeignPtr llvmDisasmDispose ctxRefRaw
   pure $ ctxRef
 
-disassemble :: LLVMDisasmContextRef -> ByteString -> IO [Instruction]
+disassemble :: LLVMDisasmContextRef -> ByteString -> IO [(PC, ByteString)]
 disassemble ctxRef mcodeStr =
   withForeignPtr mcodePtr $ \mcode -> do
     withForeignPtr ctxRef $ \ctx -> do

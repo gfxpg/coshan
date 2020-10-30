@@ -2,10 +2,11 @@ module Disassembler.Types where
 
 import Data.ByteString (ByteString)
 
-data Disassembly = Disassembly
-  { disasmKernelCode :: ByteString,
-    disasmInstructionsBin :: ByteString,
-    disasmInstructions :: [Instruction]
+data DisassembledKernel = DisassembledKernel
+  { disasmKernelName :: !ByteString,
+    disasmKernelCodeT :: !ByteString,
+    disasmInstructionsBin :: !ByteString,
+    disasmInstructions :: ![(PC, ByteString)]
   }
 
 data DisasmTarget = DisasmTarget
@@ -14,5 +15,3 @@ data DisasmTarget = DisasmTarget
   }
 
 type PC = Int
-
-type Instruction = (PC, ByteString)

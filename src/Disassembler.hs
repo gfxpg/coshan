@@ -5,21 +5,26 @@ module Disassembler (readElf, module Disassembler.Types) where
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BStr
 import qualified Data.Elf as E
-import Data.List (find)
+import Data.Maybe (fromJust)
 import Disassembler.LLVM
 import Disassembler.Types
 
-import Debug.Trace (trace)
-
-readElf :: DisasmTarget -> ByteString -> IO Disassembly
+readElf :: DisasmTarget -> ByteString -> IO [DisassembledKernel]
 readElf target bin = do
-  llvmRef <- getLlvmRef target
-  disasmInstructions <- disassemble llvmRef disasmInstructionsBin
-  pure $ Disassembly {disasmKernelCode, disasmInstructionsBin, disasmInstructions}
+  llvm <- getLlvmRef target
+  sequence (disasmSymbol llvm <$> kernelSymbols)
   where
-    (disasmKernelCode, disasmInstructionsBin) = BStr.splitAt 256 elfTextBin
-    elfTextBin = E.elfSectionData elfText
-    elfText = case find ((== ".text") . E.elfSectionName) (E.elfSections elf) of
-      Just section -> section
-      Nothing -> error (trace (show $ E.elfSections elf) "No .text section found in ELF file")
+    disasmSymbol llvm sym = do
+      let section = fromJust $ E.steEnclosingSection sym
+      let dataSize = fromIntegral $ E.steSize sym
+      let dataOffset = fromIntegral $ E.steValue sym - E.elfSectionAddr section
+      let kernelData = BStr.take dataSize $ BStr.drop dataOffset $ E.elfSectionData section
+      let (disasmKernelCodeT, disasmInstructionsBin) = BStr.splitAt 256 kernelData
+      let disasmKernelName = fromJust $ snd $ E.steName sym
+      disasmInstructions <- disassemble llvm disasmInstructionsBin
+      pure $ DisassembledKernel {disasmKernelName, disasmKernelCodeT, disasmInstructionsBin, disasmInstructions}
+    kernelSymbols = filter isCodeSymbol $ head $ E.parseSymbolTables $ elf
+    isCodeSymbol sym = case E.steEnclosingSection sym of
+      Just sct -> E.elfSectionName sct == ".text"
+      Nothing -> False
     elf = E.parseElf bin
