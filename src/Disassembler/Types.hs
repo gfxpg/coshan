@@ -6,7 +6,7 @@ data DisassembledKernel = DisassembledKernel
   { disasmKernelName :: !ByteString,
     disasmKernelCodeT :: !ByteString,
     disasmInstructionsBin :: !ByteString,
-    disasmInstructions :: ![(PC, ByteString)]
+    disasmInstructions :: ![(PC, String)]
   }
 
 data DisasmTarget = DisasmTarget

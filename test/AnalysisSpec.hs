@@ -5,7 +5,6 @@ module AnalysisSpec where
 import Analysis
 import Control.Exception (evaluate)
 import Debug.Trace (trace)
-import Helper (runControlFlowCase)
 import Test.Hspec
 
 newtype Res = Res Int deriving (Show, Eq)

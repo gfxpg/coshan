@@ -3,7 +3,6 @@
 module Disassembler.LLVM (LLVMDisasmContextRef, getLlvmRef, disassemble) where
 
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as BStr
 import qualified Data.ByteString.Internal as BStrInternal
 import Data.Word
 import Disassembler.Types
@@ -44,7 +43,7 @@ getLlvmRef target = do
   ctxRef <- newForeignPtr llvmDisasmDispose ctxRefRaw
   pure $ ctxRef
 
-disassemble :: LLVMDisasmContextRef -> ByteString -> IO [(PC, ByteString)]
+disassemble :: LLVMDisasmContextRef -> ByteString -> IO [(PC, String)]
 disassemble ctxRef mcodeStr =
   withForeignPtr mcodePtr $ \mcode -> do
     withForeignPtr ctxRef $ \ctx -> do
@@ -53,7 +52,7 @@ disassemble ctxRef mcodeStr =
         let parseInstruction = \pos -> do
               posInc <- llvmDisasmInstruction ctx (mcode `plusPtr` pos) (fromIntegral $ mcodeLen - pos) 0 outbuf (CSize 256)
               let instStrWithoutLeadingTab = castPtr $ outbuf `plusPtr` 1
-              instStr <- BStr.packCString instStrWithoutLeadingTab
+              instStr <- peekCAString instStrWithoutLeadingTab
               pure $ (pos + (fromIntegral posInc), instStr)
         let parse = \pos acc ->
               if pos < mcodeLen

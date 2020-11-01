@@ -1,67 +1,59 @@
 {-# LANGUAGE GADTs #-}
 
 module Parser
-    ( asmlst
-    , module Parser.Types
-    )
+  ( parseInstruction,
+    Instruction (..),
+    Operand (..),
+  )
 where
 
-import           Parser.Types
-import           Parser.Lexer
-import           Control.Applicative     hiding ( many
-                                                , some
-                                                )
-import           Control.Monad
-import qualified Data.Map.Strict               as Map
-import           Text.Megaparsec
-import           Text.Megaparsec.Char
-import qualified Text.Megaparsec.Char.Lexer    as L
+import qualified Data.Char as Char
+import Data.List (delete)
 
-asmlst :: Parser Listing
-asmlst = do
-    -- skip directives and kernel entry label
-    space *> skipMany directive *> asmLabel
-    Listing <$> kernelCodeT <*> some instruction <* takeRest <* eof
+data Instruction = Instruction String [Operand]
+  deriving (Eq, Show, Read)
 
-directive :: Parser (String, String)
-directive = (,) <$> directiveKey <*> option "" directiveValue
+data Operand
+  = Osgpr [Int]
+  | Ovgpr [Int]
+  | Ottmp [Int]
+  | OConst Int
+  | OOther String
+  deriving (Eq, Show, Read)
+
+parseInstruction :: String -> Instruction
+parseInstruction input = Instruction opcode operands
   where
-    directiveKey   = lexeme (char '.' *> untilSpace ".directive" <* space)
-    directiveValue = lexeme (untilSpace "directive value")
+    (opcode, operands) = case break (== ' ') input of
+      (opcode, "") -> (opcode, [])
+      (opcode, ' ' : ops) -> (opcode, reverse $ collectOperands ops [])
+    collectOperands [] acc = acc
+    collectOperands (',' : ' ' : rest) acc = collectOperands rest acc
+    collectOperands opstr acc =
+      let (op, rest) = break (== ',') opstr
+       in collectOperands rest (parseOperand op : acc)
 
-kernelCodeT :: Parser KernelCodeT
-kernelCodeT = do
-    symbol ".amd_kernel_code_t"
-    directives <- some $ (,) <$> key <*> signedInt
-    symbol ".end_amd_kernel_code_t"
-    pure $ KernelCodeT $ Map.fromList directives
-    where key = lexeme identToken <* lexeme (char '=')
+parseOperand :: String -> Operand
+parseOperand ('s' : regs@(i : _)) | i == '[' || Char.isDigit i = parseRegisterOperand Osgpr regs
+parseOperand ('v' : regs@(i : _)) | i == '[' || Char.isDigit i = parseRegisterOperand Ovgpr regs
+parseOperand ('t' : 't' : 'm' : 'p' : regs@(i : _)) | i == '[' || Char.isDigit i = parseRegisterOperand Ottmp regs
+parseOperand ('0' : 'x' : hex) = OConst $ parseNumber 16 hex
+parseOperand ('-' : dec) = OConst $ (-1) * parseNumber 10 dec
+parseOperand other
+  | all Char.isDigit other = OConst $ parseNumber 10 other
+  | otherwise = OOther other
 
-asmLabel :: Parser String
-asmLabel = lexeme (takeWhile1P (Just "label") (/= ':') <* char ':')
+parseRegisterOperand :: ([Int] -> Operand) -> String -> Operand
+parseRegisterOperand ctr input = case break (== ':') input of
+  (idx, "") -> ctr [parseNumber 10 idx]
+  ('[' : from, ':' : to) ->
+    let fromIdx = parseNumber 10 from
+        toIdx = parseNumber 10 $ delete ']' to
+     in ctr $ enumFromTo fromIdx toIdx
+  _ -> error $ "Unable to parse register operand string \"" ++ input ++ "\""
 
-instruction :: Parser Instruction
-instruction = lexeme $ do
-    ident <- identToken
-    choice [label ident, AsmInstr ident <$> operands]
+parseNumber :: Int -> String -> Int
+parseNumber base = go 0
   where
-    label name = pure (AsmLabel name) <* char ':'
-    operands = many (option ',' (char ',') *> tabSpaces1 *> instructionOperand)
-
-instructionOperand :: Parser Operand
-instructionOperand = choice
-    [ string "scc" *> pure OpSCC
-    , string "vcc" *> pure OpVCC
-    , string "exec" *> pure OpExec
-    , char 's' *> (OpSGPR <$> regs)
-    , char 'v' *> (OpVGPR <$> regs)
-    , string "0x" *> (OpConst <$> L.hexadecimal)
-    , char '-' *> (OpConst . (* (-1)) <$> L.decimal)
-    , OpConst <$> L.decimal
-    , OpSys <$> takeWhile1P (Just "operand") (\c -> c /= ',' && c /= '\n')
-    ]
-  where
-    regs :: Parser [Int]
-    regs = choice [char '[' *> range <* char ']', pure <$> L.decimal]
-    range :: Parser [Int]
-    range = enumFromTo <$> L.decimal <* char ':' <*> L.decimal
+    go acc [] = acc
+    go acc (c : rest) = go (acc * base + Char.digitToInt c) rest

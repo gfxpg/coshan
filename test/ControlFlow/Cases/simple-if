@@ -1,21 +1,21 @@
 ( [ BasicBlock
     "BB0"
-    [ AsmInstr "s_load_dwordx4"    [OpSGPR [0, 1, 2, 3], OpSGPR [4, 5], OpConst 0]
-    , AsmInstr "s_load_dword"      [OpSGPR [4], OpSGPR [4, 5], OpConst 16]
-    , AsmInstr "s_waitcnt"         [OpSys "lgkmcnt(0)"]
-    , AsmInstr "s_load_dword"      [OpSGPR [2], OpSGPR [2, 3], OpConst 0]
-    , AsmInstr "v_mov_b32_e32"     [OpVGPR [0], OpSGPR [4]]
-    , AsmInstr "s_waitcnt"         [OpSys "lgkmcnt(0)"]
-    , AsmInstr "v_cmp_neq_f32_e32" [OpVCC, OpSGPR [2], OpVGPR [0]]
-    , AsmInstr "s_and_b64"         [OpVCC, OpExec, OpVCC]
-    , AsmInstr "s_cbranch_vccnz"   [OpSys "BB0_2"]
+    [ AsmInstr "s_load_dwordx4"    [Osgpr [0, 1, 2, 3], Osgpr [4, 5], OConst 0]
+    , AsmInstr "s_load_dword"      [Osgpr [4], Osgpr [4, 5], OConst 16]
+    , AsmInstr "s_waitcnt"         [OOther "lgkmcnt(0)"]
+    , AsmInstr "s_load_dword"      [Osgpr [2], Osgpr [2, 3], OConst 0]
+    , AsmInstr "v_mov_b32_e32"     [Ovgpr [0], Osgpr [4]]
+    , AsmInstr "s_waitcnt"         [OOther "lgkmcnt(0)"]
+    , AsmInstr "v_cmp_neq_f32_e32" [Ovcc, Osgpr [2], Ovgpr [0]]
+    , AsmInstr "s_and_b64"         [Ovcc, Oexec, Ovcc]
+    , AsmInstr "s_cbranch_vccnz"   [OOther "BB0_2"]
     ]
   , BasicBlock
     "BB1"
-    [ AsmInstr "v_mov_b32_e32"      [OpVGPR [0], OpSGPR [0]]
-    , AsmInstr "v_mov_b32_e32"      [OpVGPR [1], OpSGPR [1]]
-    , AsmInstr "v_mov_b32_e32"      [OpVGPR [2], OpConst 1154269184]
-    , AsmInstr "global_store_dword" [OpVGPR [0, 1], OpVGPR [2], OpSys "off"]
+    [ AsmInstr "v_mov_b32_e32"      [Ovgpr [0], Osgpr [0]]
+    , AsmInstr "v_mov_b32_e32"      [Ovgpr [1], Osgpr [1]]
+    , AsmInstr "v_mov_b32_e32"      [Ovgpr [2], OConst 1154269184]
+    , AsmInstr "global_store_dword" [Ovgpr [0, 1], Ovgpr [2], OOther "off"]
     ]
   , BasicBlock
     "BB0_2"
