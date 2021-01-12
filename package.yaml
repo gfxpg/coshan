@@ -18,7 +18,7 @@ dependencies:
 library:
   source-dirs: src
   cc-options: -fPIC
-  extra-libraries: LLVM-10
+  extra-libraries: LLVM-11
 
 executables:
   hane-exe:
