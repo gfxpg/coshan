@@ -14,6 +14,7 @@ dependencies:
 - containers
 - bytestring
 - elf
+- utility-ht
 
 library:
   source-dirs: src

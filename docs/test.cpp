@@ -6,6 +6,17 @@ __global__ void cond_write(float *C, const float *A, float B) {
   }
 }
 
-__global__ void simple_for_loop(float *C, size_t N) {
-  for (size_t i = 0; i < N; ++i) C[i] += 9;
+__global__ void loop_with_cond(float* C, size_t N)
+{
+    while (1)
+    {
+        while (1)
+        {
+            C[0] += 1;
+            if (C[0] > 1)
+                break;
+            C[1] += 5;
+        }
+        C[2] = 0;
+    }
 }
