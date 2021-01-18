@@ -1,6 +1,6 @@
-module ParserSpec where
+module Disassembler.InstructionParserSpec where
 
-import Parser
+import Disassembler (Instruction (..), Operand (..), parseInstruction)
 import Test.Hspec
 
 spec :: Spec

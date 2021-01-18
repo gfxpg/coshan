@@ -1,8 +1,8 @@
 module Analysis.RegisterLifetime where
 
-import           Parser                         ( Instruction(..)
-                                                , Operand(..)
-                                                )
+-- import           Parser                         ( Instruction(..)
+--                                                 , Operand(..)
+--                                                 )
 import           ControlFlow
 import           Data.List                      ( foldl' )
 

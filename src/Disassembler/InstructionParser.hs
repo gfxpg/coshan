@@ -1,25 +1,10 @@
 {-# LANGUAGE GADTs #-}
 
-module Parser
-  ( parseInstruction,
-    Instruction (..),
-    Operand (..),
-  )
-where
+module Disassembler.InstructionParser (parseInstruction) where
 
 import qualified Data.Char as Char
 import Data.List (delete)
-
-data Instruction = Instruction String [Operand]
-  deriving (Eq, Show, Read)
-
-data Operand
-  = Osgpr [Int]
-  | Ovgpr [Int]
-  | Ottmp [Int]
-  | OConst Int
-  | OOther String
-  deriving (Eq, Show, Read)
+import Disassembler.Types
 
 parseInstruction :: String -> Instruction
 parseInstruction input = Instruction opcode operands

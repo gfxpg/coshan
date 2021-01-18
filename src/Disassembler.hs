@@ -1,11 +1,12 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
-module Disassembler (readElf, module Disassembler.Types) where
+module Disassembler (readElf, module Disassembler.Types, module Disassembler.InstructionParser) where
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BStr
 import qualified Data.Elf as E
 import Data.Maybe (fromJust)
+import Disassembler.InstructionParser
 import Disassembler.LLVM
 import Disassembler.Types
 
