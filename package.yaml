@@ -44,3 +44,6 @@ tests:
     - hane
     - hspec
     - hspec-megaparsec
+    - directory
+    - process
+    - string-interpolate
