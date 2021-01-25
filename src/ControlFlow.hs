@@ -1,6 +1,7 @@
 module ControlFlow (buildCfg, CFG (..), BasicBlock (..)) where
 
 import Analysis
+import Control.Applicative (Applicative (liftA2))
 import Data.List (find, findIndex, findIndices, isPrefixOf)
 import Data.Maybe (catMaybes)
 import Data.Set (Set)
@@ -9,7 +10,7 @@ import Disassembler (Instruction (..), Operand (..), PC)
 
 type BasicBlockIdx = Int
 
-data BasicBlock = BasicBlock {bbStartPc :: PC, bbEndPc :: PC, bbPredecessors :: [BasicBlockIdx], bbSuccessors :: [BasicBlockIdx]}
+data BasicBlock = BasicBlock {bbInstructions :: [(PC, Instruction)], bbPredecessors :: [BasicBlockIdx], bbSuccessors :: [BasicBlockIdx]}
   deriving (Eq, Show)
 
 newtype CFG = CFG [BasicBlock]
@@ -24,24 +25,27 @@ buildCfg instrs = CFG blocks''
     blocks'' = (\(bbIdx, bb) -> bb {bbPredecessors = findIndices (elem bbIdx . bbSuccessors) blocks'}) <$> zip [0 ..] blocks'
     blocks' = fillSuccs <$> blocks
       where
-        fillSuccs (BasicBlock startPc endPc _ _) = BasicBlock startPc endPc [] succBbs
+        fillSuccs (BasicBlock instructions _ _) = BasicBlock instructions [] succBbs
           where
+            ((bbStartPc, _), (bbEndPc, bbLastInstr)) = liftA2 (,) head last instructions
             succBbs = catMaybes $ immediateSucc : (successor <$> brs)
             immediateSucc
-              | not bbEndsWithBranch = findIndex (\(BasicBlock startPc _ _ _) -> startPc > endPc) blocks
+              | not bbEndsWithBranch = findIndex (\(BasicBlock ((startPc, _) : _) _ _) -> startPc > bbEndPc) blocks
               | otherwise = Nothing
             successor (brPc, brTargetPc, _)
-              | brPc == endPc = findIndex (\(BasicBlock firstInstPc _ _ _) -> firstInstPc == brTargetPc) blocks
+              | brPc == bbEndPc = findIndex (\(BasicBlock ((startPc, _) : _) _ _) -> startPc == brTargetPc) blocks
               | otherwise = Nothing
-            bbEndsWithBranch = case find ((== endPc) . fst) instrs of
-              Just (_, Instruction "s_branch" _) -> True
-              Just (_, Instruction opcode _) | "s_cbranch" `isPrefixOf` opcode -> True
+            bbEndsWithBranch = case bbLastInstr of
+              Instruction "s_branch" _ -> True
+              Instruction opcode _ | "s_cbranch" `isPrefixOf` opcode -> True
               _ -> False
-    blocks = reverse $ go [] blockStarts
+    blocks = reverse $ go [] blockStarts instrs
       where
         blockStarts = Set.toList $ Set.fromList $ 0 : ((\(_, target, _) -> target) <$> brs)
-        go bbs [lastBbStart] = let lastPc = fst . last $ instrs in BasicBlock lastBbStart lastPc [] [] : bbs
-        go bbs (startPc : nextStartPc : rest) = go (BasicBlock startPc (nextStartPc - 4) [] [] : bbs) (nextStartPc : rest)
+        go bbs [_] is = BasicBlock is [] [] : bbs
+        go bbs (_ : nextStartPc : rest) is =
+          let (currInsts, nextBbInsts) = break ((== nextStartPc) . fst) is
+          in go (BasicBlock currInsts [] [] : bbs) (nextStartPc : rest) nextBbInsts
     brs = branches instrs
 
 branches :: [(PC, Instruction)] -> [(PC, PC, Bool)] -- (branch instruction pc, branch target pc, taken?)
