@@ -33,12 +33,13 @@ analyzeBb (CFG bbs) currBb = analyzeInstructions ([], bbInstructions currBb) []
     analyzeInstructions (_, []) log = log
     analyzeInstructions (prev, (pc, i) : next) log =
       case i of
-        Instruction "v_readlane_b32" [dst, src, Osgpr [selector]]
-          | iterCtx <- WaitStatesIterCtx {reverseBbInsts = prev, predBbIdxs = bbPredecessors currBb, walkedInsts = [], walkedBbIdxs = []},
+        Instruction opcode [dst, src, Osgpr [selector]]
+          | opcode == "v_readlane_b32" || opcode == "v_writelane_b32",
+            iterCtx <- WaitStatesIterCtx {reverseBbInsts = prev, predBbIdxs = bbPredecessors currBb, walkedInsts = [], walkedBbIdxs = []},
             Just (missingStates, path) <- missingWaitStatesPath 4 selector iterCtx ->
             let missingStatesText = if missingStates == 1 then "1 wait state" else show missingStates ++ " wait states"
                 text =
-                  [ LogText ("Missing " ++ missingStatesText ++ " for v_readlane_b32 with an SGPR lane selector modified by a VALU instruction:"),
+                  [ LogText ("Missing " ++ missingStatesText ++ " for " ++ opcode ++ " with an SGPR lane selector modified by a VALU instruction:"),
                     LogInstructionPath (fst <$> path)
                   ]
              in analyzeInstructions ((pc, i) : prev, next) (LogMessage pc text : log)
