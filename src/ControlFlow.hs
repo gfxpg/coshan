@@ -1,4 +1,4 @@
-module ControlFlow (buildCfg, CFG (..), BasicBlock (..)) where
+module ControlFlow (buildCfg, CFG (..), BasicBlock (..), BasicBlockIdx) where
 
 import Analysis
 import Control.Applicative (Applicative (liftA2))

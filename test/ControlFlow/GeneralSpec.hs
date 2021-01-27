@@ -13,7 +13,7 @@ import Test.Hspec
 
 simpleLoopKernel :: IO ByteString
 simpleLoopKernel =
-  compileAsmKernel "cfg_simple_loop" (HsaTarget "gfx900") $
+  compileAsmKernel DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"} "cfg_simple_loop" $
     [i|
 s_load_dwordx2 s[0:1], s[4:5], 0x0
 s_waitcnt lgkmcnt(0)

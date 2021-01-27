@@ -3,12 +3,15 @@
 module Helpers where
 
 import Control.Monad (when)
+import ControlFlow
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BStr
 import Data.String.Interpolate (i)
+import Data.Tuple.Strict (mapSnd)
+import Disassembler
+import System.Directory (getCurrentDirectory)
 import System.Exit (ExitCode (..))
 import System.Process (readProcessWithExitCode)
-import System.Directory (getCurrentDirectory)
 
 rocmImage :: String
 rocmImage = "rocm/rocm-terminal:4.0"
@@ -16,10 +19,19 @@ rocmImage = "rocm/rocm-terminal:4.0"
 getTmpDir :: IO String
 getTmpDir = (++ "/.test_tmp") <$> getCurrentDirectory
 
-newtype HsaTarget = HsaTarget String
+loadGfx900Kernel :: String -> String -> IO (CFG, DisassembledKernel)
+loadGfx900Kernel = loadAsmKernel DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"}
 
-compileAsmKernel :: String -> HsaTarget -> String -> IO ByteString
-compileAsmKernel kernelName (HsaTarget mcpu) kernelText = do
+loadAsmKernel :: DisasmTarget -> String -> String -> IO (CFG, DisassembledKernel)
+loadAsmKernel target kernelName kernelText = do
+  elf <- compileAsmKernel target kernelName kernelText
+  kernel <- head <$> readElf target elf
+  let instructions = mapSnd parseInstruction <$> disasmInstructions kernel
+      cfg = buildCfg instructions
+   in pure (cfg, kernel)
+
+compileAsmKernel :: DisasmTarget -> String -> String -> IO ByteString
+compileAsmKernel DisasmTarget {disasmCPU = mcpu} kernelName kernelText = do
   -- TODO: {granulated_}wavefront_sgpr_count, {granulated_}workitem_vgpr_count (via gpr_alloc macros?)
   let source =
         [i|
@@ -36,7 +48,7 @@ compileAsmKernel kernelName (HsaTarget mcpu) kernelText = do
   tmpDir <- getTmpDir
   writeFile (tmpDir ++ "/" ++ kernelName ++ ".s") source
   let podmanCmd = ["run", "--user=root", "-v", tmpDir ++ ":/out:z", "-w=/out", rocmImage]
-  let hipccCmd = ["/opt/rocm/llvm/bin/clang", "-x", "assembler", "-target", "amdgcn--amdhsa", "-mcpu=gfx900", "-mno-code-object-v3", "-o", kernelName ++ ".co", kernelName ++ ".s"]
+  let hipccCmd = ["/opt/rocm/llvm/bin/clang", "-x", "assembler", "-target", "amdgcn--amdhsa", "-mcpu=" ++ mcpu, "-mno-code-object-v3", "-o", kernelName ++ ".co", kernelName ++ ".s"]
   (code, sout, serr) <- readProcessWithExitCode "podman" (podmanCmd ++ hipccCmd) ""
   when (sout /= "") $ putStrLn ("Compiling asm kernel " ++ kernelName ++ ", clang stdout:\n" ++ sout)
   when (serr /= "") $ putStrLn ("Compiling asm kernel " ++ kernelName ++ ", clang stderr:\n" ++ serr)
