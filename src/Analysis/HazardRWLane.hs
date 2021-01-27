@@ -44,7 +44,7 @@ analyzeBb (CFG bbs) currBb = analyzeInstructions ([], bbInstructions currBb) []
              in analyzeInstructions ((pc, i) : prev, next) (LogMessage pc text : log)
         _ -> analyzeInstructions ((pc, i) : prev, next) log
     missingWaitStatesPath :: Int -> Int -> WaitStatesIterCtx -> Maybe (Int, [(PC, Instruction)]) -- path to the instruction with missing wait states
-    missingWaitStatesPath 0 _ _ = Nothing
+    missingWaitStatesPath s _ _ | s <= 0 = Nothing
     missingWaitStatesPath minStates sgprIdx ctx@WaitStatesIterCtx {reverseBbInsts = ((pc, i) : prevInstsInBb)} =
       case i of
         -- Only VOP3B instruction perform VALU operations with an SGPR destination reg
