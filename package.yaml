@@ -46,4 +46,5 @@ tests:
     - hspec-megaparsec
     - directory
     - process
+    - pureMD5
     - string-interpolate

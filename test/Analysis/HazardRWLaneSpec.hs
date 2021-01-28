@@ -3,20 +3,21 @@
 module Analysis.HazardRWLaneSpec where
 
 import Analysis.HazardRWLane
+import Control.Monad (forM_)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BStr
 import Data.String.Interpolate (i)
 import Helpers
 import Test.Hspec
-import Control.Monad (forM_)
 
 spec :: Spec
 spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazard detection" $ do
-  it "recognizes s_nop with insufficient wait states" $ forM_ ["v_readlane_b32", "v_writelane_b32"] $ \instruction -> do
-    (cfg, kernel) <-
-      loadGfx900Kernel
-        "hazard_readlane_s_nop"
-        [i|
+  it "recognizes s_nop with insufficient wait states" $
+    forM_ ["v_readlane_b32", "v_writelane_b32"] $ \instruction -> do
+      (cfg, kernel) <-
+        loadGfx900Kernel
+          [i|rwlane_s_nop_#{instruction}|]
+          [i|
           v_add_co_u32 v1, s[2:3], v0, v1 // PC = 0: s[2:3] <- carry bits
           s_nop 2                         // PC = 8: 3 wait states
           // PC = 12: hazard: s3 has been modified by a VALU op, requires 4 wait states
@@ -24,18 +25,19 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
             "v_readlane_b32" -> "v_readlane_b32 s1, v0, s3"
             "v_writelane_b32" -> "v_writelane_b32 v0, 1, s3"}
         |]
-    checkRwLaneHazards kernel cfg
-      `shouldBe` [ LogMessage
-                     12
-                     [ LogText [i|Missing 1 wait state for #{instruction} with an SGPR lane selector modified by a VALU instruction:|],
-                       LogInstructionPath [0, 8]
-                     ]
-                 ]
-  it "follows conditional branches" $ forM_ ["v_readlane_b32", "v_writelane_b32"] $ \instruction -> do
-    (cfg, kernel) <-
-      loadGfx900Kernel
-        "hazard_readlane_cond_br"
-        [i|
+      checkRwLaneHazards kernel cfg
+        `shouldBe` [ LogMessage
+                       12
+                       [ LogText [i|Missing 1 wait state for #{instruction} with an SGPR lane selector modified by a VALU instruction:|],
+                         LogInstructionPath [0, 8]
+                       ]
+                   ]
+  it "follows conditional branches" $
+    forM_ ["v_readlane_b32", "v_writelane_b32"] $ \instruction -> do
+      (cfg, kernel) <-
+        loadGfx900Kernel
+          [i|rwlane_cond_br_#{instruction}|]
+          [i|
           v_add_co_u32 v1, s[2:3], v0, v1 // PC = 0: s[2:3] <- carry bits
           s_nop 0                         // PC = 8: 1 wait state
           s_cbranch_scc0 readlane         // PC = 12
@@ -48,18 +50,19 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
             "v_readlane_b32" -> "v_readlane_b32 s1, v0, s3"
             "v_writelane_b32" -> "v_writelane_b32 v0, 1, s3"}
         |]
-    checkRwLaneHazards kernel cfg
-      `shouldBe` [ LogMessage
-                     28
-                     [ LogText $ "Missing 2 wait states for " ++ instruction ++ " with an SGPR lane selector modified by a VALU instruction:",
-                       LogInstructionPath [0, 8, 12]
-                     ]
-                 ]
-  it "handles loops with hazards" $ forM_ ["v_readlane_b32", "v_writelane_b32"] $ \instruction -> do
-    (cfg, kernel) <-
-      loadGfx900Kernel
-        "hazard_readlane_loop"
-        [i|
+      checkRwLaneHazards kernel cfg
+        `shouldBe` [ LogMessage
+                       28
+                       [ LogText $ "Missing 2 wait states for " ++ instruction ++ " with an SGPR lane selector modified by a VALU instruction:",
+                         LogInstructionPath [0, 8, 12]
+                       ]
+                   ]
+  it "handles loops with hazards" $
+    forM_ ["v_readlane_b32", "v_writelane_b32"] $ \instruction -> do
+      (cfg, kernel) <-
+        loadGfx900Kernel
+          [i|rwlane_loop_#{instruction}|]
+          [i|
           prelude:
           s_mov_b32 s3, 0                 // PC = 0
           s_branch next                   // PC = 4
@@ -74,18 +77,19 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
           s_cbranch_scc0 loop             // PC = 28
           s_endpgm
         |]
-    checkRwLaneHazards kernel cfg
-      `shouldBe` [ LogMessage
-                     8
-                     [ LogText $ "Missing 3 wait states for " ++ instruction ++ " with an SGPR lane selector modified by a VALU instruction:",
-                       LogInstructionPath [20, 28]
-                     ]
-                 ]
-  it "handles loops without hazards" $ forM_ ["v_readlane_b32", "v_writelane_b32"] $ \instruction -> do
-    (cfg, kernel) <-
-      loadGfx900Kernel
-        "hazard_readlane_loop"
-        [i|
+      checkRwLaneHazards kernel cfg
+        `shouldBe` [ LogMessage
+                       8
+                       [ LogText $ "Missing 3 wait states for " ++ instruction ++ " with an SGPR lane selector modified by a VALU instruction:",
+                         LogInstructionPath [20, 28]
+                       ]
+                   ]
+  it "handles loops without hazards" $
+    forM_ ["v_readlane_b32", "v_writelane_b32"] $ \instruction -> do
+      (cfg, kernel) <-
+        loadGfx900Kernel
+          [i|rwlane_loop_none_#{instruction}|]
+          [i|
           prelude:
           s_mov_b32 s3, 0
           s_branch next
@@ -99,4 +103,4 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
           s_cbranch_scc0 loop
           s_endpgm
         |]
-    checkRwLaneHazards kernel cfg `shouldBe` []
+      checkRwLaneHazards kernel cfg `shouldBe` []
