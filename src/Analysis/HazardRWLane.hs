@@ -1,18 +1,13 @@
 {-# LANGUAGE PatternGuards #-}
 
-module Analysis.HazardRWLane where
+module Analysis.HazardRWLane (checkRwLaneHazards) where
 
 import ControlFlow
 import Data.Foldable (msum)
 import Data.List (find, isPrefixOf)
 import Data.Maybe (isJust)
 import Disassembler
-
-data LogMessage = LogMessage PC [LogSpan]
-  deriving (Eq, Show)
-
-data LogSpan = LogText String | LogInstructionPath [PC]
-  deriving (Eq, Show)
+import Reporting
 
 checkRwLaneHazards :: DisassembledKernel -> CFG -> [LogMessage]
 checkRwLaneHazards _ cfg@(CFG bbs) = go [] bbs

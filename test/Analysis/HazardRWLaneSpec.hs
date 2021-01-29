@@ -8,6 +8,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BStr
 import Data.String.Interpolate (i)
 import Helpers
+import Reporting
 import Test.Hspec
 
 spec :: Spec
