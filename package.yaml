@@ -14,7 +14,7 @@ dependencies:
 - containers
 - bytestring
 - elf
-- utility-ht
+- regex-tdfa
 
 library:
   source-dirs: src
@@ -48,3 +48,4 @@ tests:
     - process
     - pureMD5
     - string-interpolate
+    - utility-ht
