@@ -2,6 +2,7 @@ module Analysis.Waitcnt (checkWaitcnts) where
 
 import ControlFlow
 import Data.List (foldl')
+import Data.List.Split (dropBlanks, oneOf, split)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (isJust)
@@ -22,6 +23,10 @@ data MemCounters = MemCounters {ctrVMemLoad, ctrVMemStore :: Maybe Int, ctrIssue
 memCounters :: PC -> MemCounters
 memCounters = MemCounters Nothing Nothing
 
+areCountersEmpty :: MemCounters -> Bool
+areCountersEmpty (MemCounters Nothing Nothing _) = True
+areCountersEmpty _ = False
+
 data IterCtx = IterCtx
   { ctxRegCounters :: Map Gpr MemCounters,
     ctxWalkedIdx, ctxSuccIdxs :: [BasicBlockIdx],
@@ -40,10 +45,19 @@ analyzeBb (CFG bbs) currBb ctx = analyzeInstructions (bbInstructions currBb) ctx
             counters' <- updateCountersOnNewMemoryOp opCtrs (ctxRegCounters ctx),
             ctx' <- ctx {ctxRegCounters = foldl' (\m k -> Map.insert k opCtrs m) counters' dstRegs} ->
             analyzeInstructions next ctx'
-        Instruction _ (_dst : srcs) ->
-          analyzeInstructions next $ foldl' checkSrcPendingLoads ctx srcs
+        Instruction "s_waitcnt" [OConst 0] ->
+          analyzeInstructions next $ ctx {ctxRegCounters = Map.empty}
+        Instruction "s_waitcnt" [OOther expr] ->
+          analyzeInstructions next $ ctx {ctxRegCounters = updateCountersOnWaitcnt expr (ctxRegCounters ctx)}
+        Instruction _ (dst : srcs) ->
+          analyzeInstructions next $ dropOverwrittenGprs dst $ foldl' (checkSrcPendingLoads pc) ctx srcs
         _ ->
           analyzeInstructions next ctx
+
+dropOverwrittenGprs :: Operand -> IterCtx -> IterCtx
+dropOverwrittenGprs (Osgpr sgprs) ctx = ctx {ctxRegCounters = foldr (Map.delete . Sgpr) (ctxRegCounters ctx) sgprs}
+dropOverwrittenGprs (Ovgpr vgprs) ctx = ctx {ctxRegCounters = foldr (Map.delete . Vgpr) (ctxRegCounters ctx) vgprs}
+dropOverwrittenGprs _ ctx = ctx
 
 checkSrcPendingLoads :: PC -> IterCtx -> Operand -> IterCtx
 checkSrcPendingLoads pc ctx operand =
@@ -69,6 +83,22 @@ checkSrcPendingLoads pc ctx operand =
                 ]
          in ctx {ctxRegCounters = Map.delete gpr (ctxRegCounters ctx), ctxLog = message : ctxLog ctx}
       | otherwise = ctx
+
+updateCountersOnWaitcnt :: String -> Map Gpr MemCounters -> Map Gpr MemCounters
+updateCountersOnWaitcnt waitExpr = Map.mapMaybe dropCounters
+  where
+    dropCounters ctrs = if areCountersEmpty newCtrs then Nothing else Just newCtrs
+      where
+        newCtrs = ctrs {ctrVMemLoad = counterAfterWait ctrVMemLoad, ctrVMemStore = counterAfterWait ctrVMemStore}
+        counterAfterWait ctrTy = case (ctrTy ctrs, ctrTy countersWaitedFor) of
+          (Just c, Just w) | c >= w -> Nothing
+          (Just c, _) -> Just c
+          _ -> Nothing
+    countersWaitedFor = foldl' parseCounter (memCounters 0) (split (dropBlanks $ oneOf " &") waitExpr)
+    parseCounter :: MemCounters -> String -> MemCounters
+    parseCounter ctrs expr
+      | [[_, c]] <- expr =~ "vmcnt\\(([0-9]+)\\)" = ctrs {ctrVMemLoad = Just (read c)}
+      | otherwise = ctrs
 
 updateCountersOnNewMemoryOp :: MemCounters -> Map Gpr MemCounters -> Map Gpr MemCounters
 updateCountersOnNewMemoryOp opCtrs = Map.map $ \ctrs ->
