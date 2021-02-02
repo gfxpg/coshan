@@ -1,9 +1,13 @@
-module Reporting where
+module Reporting (LogMessage(..), LogSpan(..)) where
 
-import Disassembler (PC)
+import Disassembler (Operand, PC)
 
 data LogMessage = LogMessage PC [LogSpan]
   deriving (Eq, Show)
 
-data LogSpan = LogText String | LogInstructionPath [PC]
+data LogSpan
+  = LogText String
+  | LogInstruction String
+  | LogOperand Operand
+  | LogInstructionPath [PC]
   deriving (Eq, Show)
