@@ -1,113 +1,138 @@
+{-# LANGUAGE TupleSections #-}
+
 module Analysis.Waitcnt (checkWaitcnts) where
 
 import ControlFlow
-import Data.List (foldl')
+import Data.List (find, foldl', intercalate)
 import Data.List.Split (dropBlanks, oneOf, split)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (isJust)
+import Data.Maybe (catMaybes, isJust)
 import Disassembler
 import Reporting
 import Text.Regex.TDFA ((=~))
 
 checkWaitcnts :: DisassembledKernel -> CFG -> [LogMessage]
-checkWaitcnts _ cfg@(CFG (startBb : _)) =
-  let emptyCtx = IterCtx {ctxRegCounters = Map.empty, ctxWalkedIdx = [], ctxSuccIdxs = [], ctxLog = []}
-   in ctxLog $ analyzeBb cfg startBb emptyCtx
+checkWaitcnts _ cfg@(CFG bbs) = Map.foldrWithKey' printMessage [] logMap
+  where
+    emptyCtx = IterCtx {ctxInCounters = Map.singleton 0 Map.empty, ctxLog = Map.empty}
+    logMap = ctxLog $ analyzeCfg cfg emptyCtx 0
+    printMessage loc ctrs log =
+      LogMessage
+        (locGprUsedAt loc)
+        [ LogText "Missing",
+          LogInstruction ("s_waitcnt " ++ waitcntOps ctrs),
+          LogText "before accessing register",
+          LogOperand (locOperand loc),
+          LogText "read from memory at",
+          LogInstructionPath [locOpIssuedAt loc]
+        ] :
+      log
+      where
+        waitcntOps ctrs = intercalate " & " (waitcntOp <$> Map.toList ctrs)
+        waitcntOp (CounterVLoad, c) = "vmcnt(" ++ show c ++ ")"
+        waitcntOp (CounterVStore, c) = "vmcnt(" ++ show c ++ ")" -- TODO: vscnt on GFX10
 
 data Gpr = Sgpr Int | Vgpr Int
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
 
-data MemCounters = MemCounters {ctrVMemLoad, ctrVMemStore :: Maybe Int, ctrIssuedAt :: PC}
+data MemCounter = CounterVLoad | CounterVStore
+  deriving (Eq, Ord, Show)
 
-memCounters :: PC -> MemCounters
-memCounters = MemCounters Nothing Nothing
+type GprMemCounters = Map PC (Map MemCounter Int)
 
-areCountersEmpty :: MemCounters -> Bool
-areCountersEmpty (MemCounters Nothing Nothing _) = True
-areCountersEmpty _ = False
+type BbMemCounters = Map Gpr GprMemCounters
 
-data IterCtx = IterCtx
-  { ctxRegCounters :: Map Gpr MemCounters,
-    ctxWalkedIdx, ctxSuccIdxs :: [BasicBlockIdx],
-    ctxLog :: [LogMessage]
-  }
+data WaitcntLocation = WaitcntLocation {locGprUsedAt, locOpIssuedAt :: !PC, locOperand :: !Operand}
+  deriving (Eq, Show)
 
--- TODO: follow successors
-analyzeBb :: CFG -> BasicBlock -> IterCtx -> IterCtx
-analyzeBb (CFG bbs) currBb ctx = analyzeInstructions (bbInstructions currBb) ctx
+instance Ord WaitcntLocation where
+  compare WaitcntLocation {locGprUsedAt = pc, locOpIssuedAt = sourcePc} WaitcntLocation {locGprUsedAt = pc2, locOpIssuedAt = sourcePc2} =
+    mconcat [compare pc pc2, compare sourcePc sourcePc2]
+
+type Log = Map WaitcntLocation (Map MemCounter Int)
+
+data IterCtx = IterCtx {ctxInCounters :: !(Map BasicBlockIdx BbMemCounters), ctxLog :: !Log}
+
+analyzeCfg :: CFG -> IterCtx -> BasicBlockIdx -> IterCtx
+analyzeCfg (CFG bbs) ctx bbIdx = foldr analyzeSuccessor ctx {ctxLog = Map.union outLog (ctxLog ctx)} (bbSuccessors currBb)
   where
-    analyzeInstructions [] ctx = ctx
-    analyzeInstructions ((pc, i) : next) ctx =
+    currBb = bbs !! bbIdx
+    Just inCounters = Map.lookup bbIdx (ctxInCounters ctx)
+    (outCounters, outLog) = analyzeInstructions (bbInstructions currBb) (inCounters, ctxLog ctx)
+    analyzeSuccessor succIdx succCtx = case Map.lookup succIdx (ctxInCounters succCtx) of
+      Just succCounters | outCounters `Map.isSubmapOf` succCounters -> succCtx
+      _ -> analyzeCfg (CFG bbs) succCtx {ctxInCounters = Map.insertWith Map.union succIdx outCounters (ctxInCounters ctx)} succIdx
+    analyzeInstructions [] (bbCounters, log) = (bbCounters, log)
+    analyzeInstructions ((pc, i) : next) (bbCounters, log) =
       case i of
         Instruction _ _
-          | Just (dstRegs, opCtrs) <- extractMemoryDstAndCounters (pc, i),
-            counters' <- updateCountersOnNewMemoryOp opCtrs (ctxRegCounters ctx),
-            ctx' <- ctx {ctxRegCounters = foldl' (\m k -> Map.insert k opCtrs m) counters' dstRegs} ->
-            analyzeInstructions next ctx'
+          | Just (dstRegs, opCtrs) <- extractMemoryDstAndCounters i,
+            bbCounters' <- incCountersOnMemoryOp pc opCtrs bbCounters,
+            bbCounters'' <- addCounters bbCounters' pc opCtrs dstRegs ->
+            analyzeInstructions next (bbCounters'', log)
         Instruction "s_waitcnt" [OConst 0] ->
-          analyzeInstructions next $ ctx {ctxRegCounters = Map.empty}
+          analyzeInstructions next (Map.empty, log)
         Instruction "s_waitcnt" [OOther expr] ->
-          analyzeInstructions next $ ctx {ctxRegCounters = updateCountersOnWaitcnt expr (ctxRegCounters ctx)}
-        Instruction _ (dst : srcs) ->
-          analyzeInstructions next $ dropOverwrittenGprs dst $ foldl' (checkSrcPendingLoads pc) ctx srcs
+          analyzeInstructions next (updateCountersOnWaitcnt expr bbCounters, log)
+        Instruction _ (dst : srcs)
+          | (bbCounters', log') <- foldl' (checkSrcPendingLoads pc) (bbCounters, log) srcs,
+            bbCounters'' <- dropOverwrittenGprs dst bbCounters' ->
+            analyzeInstructions next (bbCounters'', log')
         _ ->
-          analyzeInstructions next ctx
+          analyzeInstructions next (bbCounters, log)
 
-dropOverwrittenGprs :: Operand -> IterCtx -> IterCtx
-dropOverwrittenGprs (Osgpr sgprs) ctx = ctx {ctxRegCounters = foldr (Map.delete . Sgpr) (ctxRegCounters ctx) sgprs}
-dropOverwrittenGprs (Ovgpr vgprs) ctx = ctx {ctxRegCounters = foldr (Map.delete . Vgpr) (ctxRegCounters ctx) vgprs}
-dropOverwrittenGprs _ ctx = ctx
+addCounters :: BbMemCounters -> PC -> [MemCounter] -> [Gpr] -> BbMemCounters
+addCounters bbCounters pc ctrs = foldr insertGprCounter bbCounters
+  where
+    insertGprCounter gpr = Map.insertWith (Map.unionWith min) gpr (Map.singleton pc $ Map.fromList $ (,0) <$> ctrs)
 
-checkSrcPendingLoads :: PC -> IterCtx -> Operand -> IterCtx
-checkSrcPendingLoads pc ctx operand =
+dropOverwrittenGprs :: Operand -> BbMemCounters -> BbMemCounters
+dropOverwrittenGprs (Osgpr sgprs) bbCtrs = foldr (Map.delete . Sgpr) bbCtrs sgprs
+dropOverwrittenGprs (Ovgpr vgprs) bbCtrs = foldr (Map.delete . Vgpr) bbCtrs vgprs
+dropOverwrittenGprs _ bbCtrs = bbCtrs
+
+checkSrcPendingLoads :: PC -> (BbMemCounters, Log) -> Operand -> (BbMemCounters, Log)
+checkSrcPendingLoads pc (bbCtrs, log) operand =
   case operand of
     Osgpr (sgprIdx : sgprRest) -> checkSrcPendingLoads pc (checkRegister (Osgpr [sgprIdx]) (Sgpr sgprIdx)) (Osgpr sgprRest)
     Ovgpr (vgprIdx : vgprRest) -> checkSrcPendingLoads pc (checkRegister (Ovgpr [vgprIdx]) (Vgpr vgprIdx)) (Ovgpr vgprRest)
-    _ -> ctx
+    _ -> (bbCtrs, log)
   where
-    checkRegister gprOp gpr
-      | Just ctrs <- Map.lookup gpr (ctxRegCounters ctx) =
-        let waitcntOps ctrs
-              | Just c <- ctrVMemLoad ctrs = "vmcnt(" ++ show c ++ ")"
-              | Just c <- ctrVMemStore ctrs = "vmcnt(" ++ show c ++ ")" -- TODO: vscnt on GFX10
-            message =
-              LogMessage
-                pc
-                [ LogText "Missing",
-                  LogInstruction ("s_waitcnt " ++ waitcntOps ctrs),
-                  LogText "before accessing register",
-                  LogOperand gprOp,
-                  LogText "read from memory at",
-                  LogInstructionPath [ctrIssuedAt ctrs]
-                ]
-         in ctx {ctxRegCounters = Map.delete gpr (ctxRegCounters ctx), ctxLog = message : ctxLog ctx}
-      | otherwise = ctx
+    checkRegister gprOp gpr = case Map.lookup gpr bbCtrs of
+      Just gprCtrs -> (Map.delete gpr bbCtrs, log')
+        where
+          log' = Map.foldrWithKey' updateLog log gprCtrs
+          updateLog ctrOriginPc ctrs log =
+            let location = WaitcntLocation {locGprUsedAt = pc, locOpIssuedAt = ctrOriginPc, locOperand = operand}
+             in Map.insertWith (Map.unionWith min) location ctrs log
+      _ -> (bbCtrs, log)
 
-updateCountersOnWaitcnt :: String -> Map Gpr MemCounters -> Map Gpr MemCounters
+updateCountersOnWaitcnt :: String -> BbMemCounters -> BbMemCounters
 updateCountersOnWaitcnt waitExpr = Map.mapMaybe dropCounters
   where
-    dropCounters ctrs = if areCountersEmpty newCtrs then Nothing else Just newCtrs
+    dropCounters ctrsByPc = if Map.null newCtrs then Nothing else Just newCtrs
       where
-        newCtrs = ctrs {ctrVMemLoad = counterAfterWait ctrVMemLoad, ctrVMemStore = counterAfterWait ctrVMemStore}
-        counterAfterWait ctrTy = case (ctrTy ctrs, ctrTy countersWaitedFor) of
-          (Just c, Just w) | c >= w -> Nothing
-          (Just c, _) -> Just c
-          _ -> Nothing
-    countersWaitedFor = foldl' parseCounter (memCounters 0) (split (dropBlanks $ oneOf " &") waitExpr)
-    parseCounter :: MemCounters -> String -> MemCounters
-    parseCounter ctrs expr
-      | [[_, c]] <- expr =~ "vmcnt\\(([0-9]+)\\)" = ctrs {ctrVMemLoad = Just (read c)}
-      | otherwise = ctrs
+        newCtrs = Map.mapMaybe countersAfterWait ctrsByPc
+        countersAfterWait :: Map MemCounter Int -> Maybe (Map MemCounter Int)
+        countersAfterWait ctrs = if Map.null ctrs' then Nothing else Just ctrs'
+          where
+            ctrs' = Map.filterWithKey (\ty c -> not (waitedFor ty c)) ctrs
+            waitedFor ty c = case find ((== ty) . fst) countersWaitedFor of
+              Just (_, cWaited) | c >= cWaited -> True
+              _ -> False
+    countersWaitedFor = parseCounter =<< split (dropBlanks $ oneOf " &") waitExpr
+    parseCounter :: String -> [(MemCounter, Int)]
+    parseCounter expr
+      | [[_, c]] <- expr =~ "vmcnt\\(([0-9]+)\\)" = [(CounterVLoad, read c)]
+      | otherwise = []
 
-updateCountersOnNewMemoryOp :: MemCounters -> Map Gpr MemCounters -> Map Gpr MemCounters
-updateCountersOnNewMemoryOp opCtrs = Map.map $ \ctrs ->
-  let inc getCounter = (+ (if isJust (getCounter opCtrs) then 1 else 0)) <$> getCounter ctrs
-   in ctrs {ctrVMemLoad = inc ctrVMemLoad, ctrVMemStore = inc ctrVMemStore}
+incCountersOnMemoryOp :: PC -> [MemCounter] -> BbMemCounters -> BbMemCounters
+incCountersOnMemoryOp pc opCtrs = Map.map $ Map.map $ Map.mapWithKey (\ty c -> if ty `elem` opCtrs then c + 1 else c)
 
-extractMemoryDstAndCounters :: (PC, Instruction) -> Maybe ([Gpr], MemCounters)
-extractMemoryDstAndCounters (pc, Instruction opcode (Ovgpr vdst : _))
-  | opcode =~ "buffer_(load|atomic)_" = Just (Vgpr <$> vdst, (memCounters pc) {ctrVMemLoad = Just 0})
-  | opcode =~ "buffer_store_" = Just (Vgpr <$> vdst, (memCounters pc) {ctrVMemStore = Just 0})
+extractMemoryDstAndCounters :: Instruction -> Maybe ([Gpr], [MemCounter])
+extractMemoryDstAndCounters (Instruction opcode (Ovgpr vdst : _))
+  | opcode =~ "buffer_(load|atomic)_" = Just (Vgpr <$> vdst, [CounterVLoad])
+  | opcode =~ "buffer_store_" = Just (Vgpr <$> vdst, [CounterVStore])
   | otherwise = Nothing
 extractMemoryDstAndCounters _ = Nothing
