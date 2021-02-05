@@ -94,7 +94,7 @@ spec = describe "cfg construction" $ do
             { bbInstructions =
                 [ (84, Instruction "v_mov_b32_e32" [Ovgpr [3], Osgpr [1]]),
                   (88, Instruction "v_mov_b32_e32" [Ovgpr [2], Osgpr [0]]),
-                  (92, Instruction "global_store_dword" [Ovgpr [2, 3], Ovgpr [1], OOther "off offset:4"]),
+                  (92, Instruction "global_store_dword" [Ovgpr [2, 3], Ovgpr [1], OOther "off", OOther "offset:4"]),
                   (100, Instruction "s_branch" [OConst 65517])
                 ],
               bbPredecessors = [3],

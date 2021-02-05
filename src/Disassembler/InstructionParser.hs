@@ -3,20 +3,15 @@
 module Disassembler.InstructionParser (parseInstruction) where
 
 import qualified Data.Char as Char
+import Data.List.Split (dropBlanks, dropDelims, oneOf, split)
 import Data.List (delete)
 import Disassembler.Types
 
 parseInstruction :: String -> Instruction
 parseInstruction input = Instruction opcode operands
   where
-    (opcode, operands) = case break (== ' ') input of
-      (opcode, "") -> (opcode, [])
-      (opcode, ' ' : ops) -> (opcode, reverse $ collectOperands ops [])
-    collectOperands [] acc = acc
-    collectOperands (',' : ' ' : rest) acc = collectOperands rest acc
-    collectOperands opstr acc =
-      let (op, rest) = break (== ',') opstr
-       in collectOperands rest (parseOperand op : acc)
+    (opcode, opStr) = break (== ' ') input
+    operands = parseOperand <$> split (dropBlanks $ dropDelims $ oneOf " ,&") opStr
 
 parseOperand :: String -> Operand
 parseOperand ('s' : regs@(i : _)) | i == '[' || Char.isDigit i = parseRegisterOperand Osgpr regs

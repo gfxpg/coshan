@@ -3,8 +3,7 @@
 module Analysis.Waitcnt (checkWaitcnts) where
 
 import ControlFlow
-import Data.List (find, foldl', intercalate)
-import Data.List.Split (dropBlanks, oneOf, split)
+import Data.List (find, foldl')
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes, isJust)
@@ -29,7 +28,7 @@ checkWaitcnts _ cfg@(CFG bbs) = Map.foldrWithKey' printMessage [] logMap
         ] :
       log
       where
-        waitcntOps ctrs = intercalate " & " (waitcntOp <$> Map.toList ctrs)
+        waitcntOps ctrs = unwords (waitcntOp <$> Map.toList ctrs)
         waitcntOp (CounterVLoad, c) = "vmcnt(" ++ show c ++ ")"
         waitcntOp (CounterVStore, c) = "vmcnt(" ++ show c ++ ")" -- TODO: vscnt on GFX10
 
@@ -73,7 +72,7 @@ analyzeCfg (CFG bbs) ctx bbIdx = foldr analyzeSuccessor ctx {ctxLog = Map.union 
             analyzeInstructions next (bbCounters'', log)
         Instruction "s_waitcnt" [OConst 0] ->
           analyzeInstructions next (Map.empty, log)
-        Instruction "s_waitcnt" [OOther expr] ->
+        Instruction "s_waitcnt" expr ->
           analyzeInstructions next (updateCountersOnWaitcnt expr bbCounters, log)
         Instruction _ (dst : srcs)
           | (bbCounters', log') <- foldl' (checkSrcPendingLoads pc) (bbCounters, log) srcs,
@@ -108,8 +107,8 @@ checkSrcPendingLoads pc (bbCtrs, log) operand =
              in Map.insertWith (Map.unionWith min) location ctrs log
       _ -> (bbCtrs, log)
 
-updateCountersOnWaitcnt :: String -> BbMemCounters -> BbMemCounters
-updateCountersOnWaitcnt waitExpr = Map.mapMaybe dropCounters
+updateCountersOnWaitcnt :: [Operand] -> BbMemCounters -> BbMemCounters
+updateCountersOnWaitcnt waitops = Map.mapMaybe dropCounters
   where
     dropCounters ctrsByPc = if Map.null newCtrs then Nothing else Just newCtrs
       where
@@ -121,9 +120,9 @@ updateCountersOnWaitcnt waitExpr = Map.mapMaybe dropCounters
             waitedFor ty c = case find ((== ty) . fst) countersWaitedFor of
               Just (_, cWaited) | c >= cWaited -> True
               _ -> False
-    countersWaitedFor = parseCounter =<< split (dropBlanks $ oneOf " &") waitExpr
-    parseCounter :: String -> [(MemCounter, Int)]
-    parseCounter expr
+    countersWaitedFor = parseCounter =<< waitops
+    parseCounter :: Operand -> [(MemCounter, Int)]
+    parseCounter (OOther expr)
       | [[_, c]] <- expr =~ "vmcnt\\(([0-9]+)\\)" = [(CounterVLoad, read c)]
       | otherwise = []
 
