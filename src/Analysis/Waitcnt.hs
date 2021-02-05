@@ -17,7 +17,7 @@ import Text.Regex.TDFA ((=~))
 checkWaitcnts :: DisassembledKernel -> CFG -> [LogMessage]
 checkWaitcnts _ cfg@(CFG bbs) = Map.foldrWithKey' printMessage [] logMap
   where
-    emptyCtx = IterCtx {ctxInCounters = Map.singleton 0 Map.empty, ctxLog = Map.empty}
+    emptyCtx = IterCtx {ctxInEvents = Map.singleton 0 Map.empty, ctxLog = Map.empty}
     logMap = ctxLog $ analyzeCfg cfg emptyCtx 0
     printMessage loc ctrs log =
       LogMessage
@@ -38,12 +38,12 @@ checkWaitcnts _ cfg@(CFG bbs) = Map.foldrWithKey' printMessage [] logMap
 data Gpr = Sgpr Int | Vgpr Int
   deriving (Eq, Ord, Show)
 
-data MemCounter = CounterVMem | CounterSLoad | CounterLDS
+data MemEvent = EventVMem | EventSLoad | EventLDS
   deriving (Eq, Ord, Show)
 
-type GprMemCounters = Map PC (Map MemCounter Int)
+type GprMemEvents = Map PC (Map MemEvent Int)
 
-type BbMemCounters = Map Gpr GprMemCounters
+type BbMemEvents = Map Gpr GprMemEvents
 
 data WaitcntLocation = WaitcntLocation {locGprUsedAt, locOpIssuedAt :: !PC, locOperand :: !Operand}
   deriving (Eq, Show)
@@ -57,82 +57,84 @@ type Log = Map WaitcntLocation (Map WaitCounter Int)
 data WaitCounter = WaitVmcnt | WaitLgkmcnt
   deriving (Eq, Ord)
 
-data IterCtx = IterCtx {ctxInCounters :: !(Map BasicBlockIdx BbMemCounters), ctxLog :: !Log}
+data IterCtx = IterCtx {ctxInEvents :: !(Map BasicBlockIdx BbMemEvents), ctxLog :: !Log}
 
 analyzeCfg :: CFG -> IterCtx -> BasicBlockIdx -> IterCtx
 analyzeCfg (CFG bbs) ctx bbIdx = foldr analyzeSuccessor ctx {ctxLog = Map.union outLog (ctxLog ctx)} (bbSuccessors currBb)
   where
     currBb = bbs !! bbIdx
-    Just inCounters = Map.lookup bbIdx (ctxInCounters ctx)
-    (outCounters, outLog) = analyzeInstructions (bbInstructions currBb) (inCounters, ctxLog ctx)
-    analyzeSuccessor succIdx succCtx = case Map.lookup succIdx (ctxInCounters succCtx) of
-      Just succCounters | outCounters `Map.isSubmapOf` succCounters -> succCtx
-      _ -> analyzeCfg (CFG bbs) succCtx {ctxInCounters = Map.insertWith Map.union succIdx outCounters (ctxInCounters ctx)} succIdx
-    analyzeInstructions [] (bbCounters, log) = (bbCounters, log)
-    analyzeInstructions ((pc, i) : next) (bbCounters, log) =
+    Just inEvents = Map.lookup bbIdx (ctxInEvents ctx)
+    (outEvents, outLog) = analyzeInstructions (bbInstructions currBb) (inEvents, ctxLog ctx)
+    analyzeSuccessor succIdx succCtx = case Map.lookup succIdx (ctxInEvents succCtx) of
+      Just succEvents | outEvents `Map.isSubmapOf` succEvents -> succCtx
+      _ -> analyzeCfg (CFG bbs) succCtx {ctxInEvents = Map.insertWith Map.union succIdx outEvents (ctxInEvents ctx)} succIdx
+    analyzeInstructions [] (bbEvents, log) = (bbEvents, log)
+    analyzeInstructions ((pc, i) : next) (bbEvents, log) =
       case i of
         Instruction "s_waitcnt" [OConst 0] ->
           analyzeInstructions next (Map.empty, log)
         Instruction "s_waitcnt" expr ->
-          analyzeInstructions next (updateCountersOnWaitcnt expr bbCounters, log)
+          analyzeInstructions next (updateEventsOnWaitcnt expr bbEvents, log)
         Instruction _ _ ->
-          --trace ("dst: " ++ show dstGprs ++ ", srcs: " ++ show srcGprs ++ ", ctrs: " ++ show bbCounters') $
-          analyzeInstructions next (bbCounters'', log')
+          --trace ("dst: " ++ show dstGprs ++ ", srcs: " ++ show srcGprs ++ ", events: " ++ show bbEvents') $
+          analyzeInstructions next (bbEvents'', log')
           where
             (dstGprs, srcGprs) = extractDstSrcGprs i
-            counters = extractGprCounters i
-            (bbCounters', log') = foldl' (checkSrcPendingLoads pc) (bbCounters, log) srcGprs
-            bbCounters'' = case counters of
-              Just (ctrGprs, opCtrs) -> addCounters pc opCtrs ctrGprs $ incCountersOnMemoryOp pc opCtrs bbCounters'
-              _ -> foldr Map.delete bbCounters' dstGprs -- drop overwritten gprs
+            (bbEvents', log') = foldl' (checkSrcPendingLoads pc) (bbEvents, log) srcGprs
+            bbEvents'' = case extractGprEvents i of
+              Just (eventGprs, events) -> addEvents pc events eventGprs $ incExistingEvents pc events bbEvents'
+              _ -> foldr Map.delete bbEvents' dstGprs -- drop overwritten gprs
 
-addCounters :: PC -> [MemCounter] -> [Gpr] -> BbMemCounters -> BbMemCounters
-addCounters pc ctrs gprs bbCounters = foldr insertGprCounter bbCounters gprs
+addEvents :: PC -> [MemEvent] -> [Gpr] -> BbMemEvents -> BbMemEvents
+addEvents pc events gprs bbEvents = foldr insertGprEvent bbEvents gprs
   where
-    insertGprCounter gpr = Map.insertWith (Map.unionWith min) gpr (Map.singleton pc $ Map.fromList $ (,0) <$> ctrs)
+    insertGprEvent gpr = Map.insertWith (Map.unionWith min) gpr (Map.singleton pc $ Map.fromList $ (,0) <$> events)
 
-checkSrcPendingLoads :: PC -> (BbMemCounters, Log) -> Gpr -> (BbMemCounters, Log)
-checkSrcPendingLoads pc (bbCtrs, log) gpr = case Map.lookup gpr bbCtrs of
-  Just gprCtrs -> (Map.delete gpr bbCtrs, log')
+checkSrcPendingLoads :: PC -> (BbMemEvents, Log) -> Gpr -> (BbMemEvents, Log)
+checkSrcPendingLoads pc (bbEvents, log) gpr = case Map.lookup gpr bbEvents of
+  Just gprEvents -> (Map.delete gpr bbEvents, log')
     where
-      log' = Map.foldrWithKey' updateLog log gprCtrs
+      log' = Map.foldrWithKey' logCountersForEventsIssuedAt log gprEvents
       operand = case gpr of Sgpr s -> Osgpr [s]; Vgpr v -> Ovgpr [v]
-      updateLog ctrOriginPc ctrs = Map.insert location waits
+      logCountersForEventsIssuedAt issuedAtPc events = Map.insert location counters
         where
-          location = WaitcntLocation {locGprUsedAt = pc, locOpIssuedAt = ctrOriginPc, locOperand = operand}
+          location = WaitcntLocation {locGprUsedAt = pc, locOpIssuedAt = issuedAtPc, locOperand = operand}
           existingWaits = fromMaybe Map.empty $ Map.lookup location log
-          waits = Map.foldrWithKey waitForCtr existingWaits ctrs
-          waitForCtr CounterVMem val = Map.insertWith min WaitVmcnt val
+          counters = Map.foldrWithKey' counterForEvent existingWaits events
+          counterForEvent EventVMem val = Map.insertWith min WaitVmcnt val
           -- If there are multiple types of lgkmcnt instructions in flight, they will return out of order so we need to wait for all of them.
-          waitForCtr CounterLDS val
-            | CounterSLoad `Set.member` outstandingCtrs = Map.insert WaitLgkmcnt 0
+          counterForEvent EventLDS val
+            | EventSLoad `Set.member` outstandingEventsAtCurrentPc = Map.insert WaitLgkmcnt 0
             | otherwise = Map.insert WaitLgkmcnt val
           -- Scalar loads are always returned out of order so we need to wait for lgkmcnt to reach 0.
-          waitForCtr CounterSLoad _ = Map.insert WaitLgkmcnt 0
-      outstandingCtrs = Map.foldl' (Map.foldrWithKey (\ctrPc ctrMap -> Set.union (if ctrPc < pc then Map.keysSet ctrMap else Set.empty))) Set.empty bbCtrs
-  _ -> (bbCtrs, log)
+          counterForEvent EventSLoad _ = Map.insert WaitLgkmcnt 0
+      outstandingEventsAtCurrentPc = Map.foldl' (Map.foldrWithKey' addEventsBeforeCurrentPc) Set.empty bbEvents
+      addEventsBeforeCurrentPc eventsPc eventsMap acc
+        | eventsPc < pc = acc `Set.union` Map.keysSet eventsMap
+        | otherwise = acc
+  _ -> (bbEvents, log)
 
-updateCountersOnWaitcnt :: [Operand] -> BbMemCounters -> BbMemCounters
-updateCountersOnWaitcnt waitops = Map.mapMaybe dropCounters
+updateEventsOnWaitcnt :: [Operand] -> BbMemEvents -> BbMemEvents
+updateEventsOnWaitcnt waitops = Map.mapMaybe dropEvents
   where
-    dropCounters ctrsByPc = if Map.null newCtrs then Nothing else Just newCtrs
+    dropEvents eventsByPc = if Map.null newEvents then Nothing else Just newEvents
       where
-        newCtrs = Map.mapMaybe countersAfterWait ctrsByPc
-        countersAfterWait :: Map MemCounter Int -> Maybe (Map MemCounter Int)
-        countersAfterWait ctrs = if Map.null ctrs' then Nothing else Just ctrs'
+        newEvents = Map.mapMaybe eventsAfterWait eventsByPc
+        eventsAfterWait :: Map MemEvent Int -> Maybe (Map MemEvent Int)
+        eventsAfterWait events = if Map.null events' then Nothing else Just events'
           where
-            ctrs' = Map.filterWithKey (\ty c -> not (waitedFor ty c)) ctrs
-            waitedFor ty c = case find ((== ty) . fst) countersWaitedFor of
+            events' = Map.filterWithKey (\ty c -> not (waitedFor ty c)) events
+            waitedFor ty c = case find ((== ty) . fst) eventsWaitedFor of
               Just (_, cWaited) | c >= cWaited -> True
               _ -> False
-    countersWaitedFor = parseCounter =<< waitops
-    parseCounter :: Operand -> [(MemCounter, Int)]
-    parseCounter (OOther expr)
-      | [[_, c]] <- expr =~ "vmcnt\\(([0-9]+)\\)" = [(CounterVMem, read c)]
+    eventsWaitedFor = parseWaitClause =<< waitops
+    parseWaitClause :: Operand -> [(MemEvent, Int)]
+    parseWaitClause (OOther expr)
+      | [[_, c]] <- expr =~ "vmcnt\\(([0-9]+)\\)" = [(EventVMem, read c)]
       | otherwise = []
 
-incCountersOnMemoryOp :: PC -> [MemCounter] -> BbMemCounters -> BbMemCounters
-incCountersOnMemoryOp pc opCtrs = Map.map $ Map.map $ Map.mapWithKey (\ty c -> if ty `elem` opCtrs then c + 1 else c)
+incExistingEvents :: PC -> [MemEvent] -> BbMemEvents -> BbMemEvents
+incExistingEvents pc events = Map.map $ Map.map $ Map.mapWithKey (\ty c -> if ty `elem` events then c + 1 else c)
 
 extractDstSrcGprs :: Instruction -> ([Gpr], [Gpr])
 extractDstSrcGprs i = case i of
@@ -145,14 +147,14 @@ extractDstSrcGprs i = case i of
     extractGpr (Ovgpr vgprIdxs) gprs = (Vgpr <$> vgprIdxs) ++ gprs
     extractGpr _ gprs = gprs
 
-extractGprCounters :: Instruction -> Maybe ([Gpr], [MemCounter])
-extractGprCounters (Instruction opcode (Ovgpr vdst : _))
-  | opcode =~ "^buffer_(load|atomic)" = Just (Vgpr <$> vdst, [CounterVMem])
-  | opcode =~ "^buffer_store" = Just ([], [CounterVMem])
-  | opcode =~ "^ds_read" = Just (Vgpr <$> vdst, [CounterLDS])
-  | opcode =~ "^ds_write" = Just ([], [CounterLDS])
+extractGprEvents :: Instruction -> Maybe ([Gpr], [MemEvent])
+extractGprEvents (Instruction opcode (Ovgpr vdst : _))
+  | opcode =~ "^buffer_(load|atomic)" = Just (Vgpr <$> vdst, [EventVMem])
+  | opcode =~ "^buffer_store" = Just ([], [EventVMem])
+  | opcode =~ "^ds_read" = Just (Vgpr <$> vdst, [EventLDS])
+  | opcode =~ "^ds_write" = Just ([], [EventLDS])
   | otherwise = Nothing
-extractGprCounters (Instruction opcode (Osgpr sdst : _))
-  | opcode =~ "^s_(buffer_)?load" = Just (Sgpr <$> sdst, [CounterSLoad])
+extractGprEvents (Instruction opcode (Osgpr sdst : _))
+  | opcode =~ "^s_(buffer_)?load" = Just (Sgpr <$> sdst, [EventSLoad])
   | otherwise = Nothing
-extractGprCounters _ = Nothing
+extractGprEvents _ = Nothing
