@@ -27,15 +27,30 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
           v_add_f32 v1, v1, 1.0                                // PC = 28, shouldn't produce an error because v1 is overwritten
         |]
     checkWaitcnts kernel cfg
-      `shouldBe` [ LogMessage
-                     16
-                     [ LogText "Missing",
-                       LogInstruction "s_waitcnt vmcnt(1)",
-                       LogText "before accessing register",
-                       LogOperand (Ovgpr [2]),
-                       LogText "read from memory at",
-                       LogInstructionPath [0]
-                     ]
+      `shouldBe` [LogMessage 16 [LogText "Missing", LogInstruction "s_waitcnt vmcnt(1)", LogText "before accessing register", LogOperand (Ovgpr [2]), LogText "read from memory at", LogInstructionPath [0]]]
+  it "checks scalar memory read instructions" $ do
+    (cfg, kernel) <-
+      loadGfx900Kernel
+        [i|waitcnt_scalar_load|]
+        [i|
+          s_load_dword s0, s[4:5], 0
+          s_load_dwordx4 s[8:11], s[4:5], 4           // PC = 8
+          s_mov_b32 m0, (2 << 16) | 0                 // PC = 16
+          v_add_u32 v0, lds_direct, s0                // PC = 24, TODO: It seems like lds_direct does not count toward lgkmcnt, does it?..
+          ds_read2_b32 v[1:2], v0 offset0:0 offset1:4 // PC = 32
+          v_add_u32 v3, 12, v0                        // PC = 40
+          ds_read_b32 v3, v3                          // PC = 44
+          buffer_store_dword v1, off, s[8:11], 0 offset:0  // PC = 52
+          buffer_store_dword v2, off, s[8:11], 0 offset:4  // PC = 60
+          buffer_store_dword v3, off, s[8:11], 0 offset:8  // PC = 68
+        |]
+    print cfg
+    checkWaitcnts kernel cfg
+      `shouldBe` [ LogMessage 24 [LogText "Missing", LogInstruction "s_waitcnt lgkmcnt(0)", LogText "before accessing register", LogOperand (Osgpr [0]), LogText "read from memory at", LogInstructionPath [0]],
+                   LogMessage 52 [LogText "Missing", LogInstruction "s_waitcnt lgkmcnt(0)", LogText "before accessing register", LogOperand (Osgpr [11]), LogText "read from memory at", LogInstructionPath [8]],
+                   LogMessage 52 [LogText "Missing", LogInstruction "s_waitcnt lgkmcnt(0)", LogText "before accessing register", LogOperand (Ovgpr [1]), LogText "read from memory at", LogInstructionPath [32]],
+                   LogMessage 60 [LogText "Missing", LogInstruction "s_waitcnt lgkmcnt(1)", LogText "before accessing register", LogOperand (Ovgpr [2]), LogText "read from memory at", LogInstructionPath [32]],
+                   LogMessage 68 [LogText "Missing", LogInstruction "s_waitcnt lgkmcnt(0)", LogText "before accessing register", LogOperand (Ovgpr [3]), LogText "read from memory at", LogInstructionPath [44]]
                  ]
   it "recognizes s_waitcnt vmcnt(N)" $ do
     (cfg, kernel) <-
@@ -49,16 +64,7 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
         v_add_f32 v0, v0, v4                                 // PC = 28
       |]
     checkWaitcnts kernel cfg
-      `shouldBe` [ LogMessage
-                     28
-                     [ LogText "Missing",
-                       LogInstruction "s_waitcnt vmcnt(0)",
-                       LogText "before accessing register",
-                       LogOperand (Ovgpr [4]),
-                       LogText "read from memory at",
-                       LogInstructionPath [8]
-                     ]
-                 ]
+      `shouldBe` [LogMessage 28 [LogText "Missing", LogInstruction "s_waitcnt vmcnt(0)", LogText "before accessing register", LogOperand (Ovgpr [4]), LogText "read from memory at", LogInstructionPath [8]]]
   it "recognizes s_waitcnt 0" $ do
     (cfg, kernel) <-
       loadGfx900Kernel
