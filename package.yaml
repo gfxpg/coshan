@@ -29,6 +29,8 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - coshan
+    - cmdargs
+    - pretty-simple
 
 tests:
   coshan-test:
