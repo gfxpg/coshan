@@ -2,8 +2,8 @@
 
 module AnalysisSpec where
 
-import Analysis
 import Control.Exception (evaluate)
+import Coshan.Analysis
 import Debug.Trace (trace)
 import Test.Hspec
 

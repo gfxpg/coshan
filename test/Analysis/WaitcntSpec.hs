@@ -2,15 +2,15 @@
 
 module Analysis.WaitcntSpec where
 
-import Analysis.Waitcnt
 import Control.Monad (forM_)
-import ControlFlow
+import Coshan.Analysis.Waitcnt
+import Coshan.ControlFlow
+import Coshan.Disassembler
+import Coshan.Reporting
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BStr
 import Data.String.Interpolate (i)
-import Disassembler
 import Helpers
-import Reporting
 import Test.Hspec
 
 spec :: Spec

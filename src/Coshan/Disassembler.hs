@@ -1,14 +1,19 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
-module Disassembler (readElf, module Disassembler.Types, module Disassembler.InstructionParser) where
+module Coshan.Disassembler
+  ( readElf,
+    module Coshan.Disassembler.Types,
+    module Coshan.Disassembler.InstructionParser,
+  )
+where
 
+import Coshan.Disassembler.InstructionParser
+import Coshan.Disassembler.LLVM
+import Coshan.Disassembler.Types
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BStr
 import qualified Data.Elf as E
 import Data.Maybe (fromJust)
-import Disassembler.InstructionParser
-import Disassembler.LLVM
-import Disassembler.Types
 
 readElf :: DisasmTarget -> ByteString -> IO [DisassembledKernel]
 readElf target bin = do

@@ -3,7 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Analysis (Analyzer, emptyAnalysisCtx, registerAnalyzer, runAnalysis, getAnalyzerOutput) where
+module Coshan.Analysis (Analyzer, emptyAnalysisCtx, registerAnalyzer, runAnalysis, getAnalyzerOutput) where
 
 import Control.Monad
 import Data.List (elem, intercalate)

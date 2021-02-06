@@ -1,12 +1,9 @@
-name: hane
+name: coshan
 version: 0.1.0.0
-github: "timlathy/hane"
-author: tim
+github: "timlathy/coshan"
 
 extra-source-files:
 - README.md
-
-description: Please see the README on GitHub at <https://github.com/timlathy/hane#readme>
 
 dependencies:
 - base >= 4.7 && < 5
@@ -23,7 +20,7 @@ library:
   extra-libraries: LLVM-11
 
 executables:
-  hane-exe:
+  coshan-exe:
     main: Main.hs
     source-dirs: app
     ghc-options:
@@ -31,10 +28,10 @@ executables:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - hane
+    - coshan
 
 tests:
-  hane-test:
+  coshan-test:
     main: Spec.hs
     source-dirs: test
     ghc-options:
@@ -42,7 +39,7 @@ tests:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - hane
+    - coshan
     - hspec
     - hspec-megaparsec
     - directory

@@ -1,4 +1,4 @@
-module Disassembler.Types where
+module Coshan.Disassembler.Types where
 
 import Data.ByteString (ByteString)
 

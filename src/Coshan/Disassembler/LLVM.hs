@@ -1,11 +1,11 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 
-module Disassembler.LLVM (LLVMDisasmContextRef, getLlvmRef, disassemble) where
+module Coshan.Disassembler.LLVM (LLVMDisasmContextRef, getLlvmRef, disassemble) where
 
+import Coshan.Disassembler.Types
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Internal as BStrInternal
 import Data.Word
-import Disassembler.Types
 import Foreign.C.String
 import Foreign.C.Types
 import Foreign.ForeignPtr

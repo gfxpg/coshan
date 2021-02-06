@@ -1,8 +1,8 @@
 cradle:
   stack:
     - path: ./test
-      component: "hane:test:hane-test"
+      component: "coshan:test:coshan-test"
     - path: ./src
-      component: "hane:lib"
+      component: "coshan:lib"
     - path: ./app
-      component: "hane:exe:hane-exe"
+      component: "coshan:exe:coshan-exe"

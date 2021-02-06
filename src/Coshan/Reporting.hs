@@ -1,6 +1,6 @@
-module Reporting (LogMessage(..), LogSpan(..)) where
+module Coshan.Reporting (LogMessage (..), LogSpan (..)) where
 
-import Disassembler (Operand, PC)
+import Coshan.Disassembler (Operand, PC)
 
 data LogMessage = LogMessage PC [LogSpan]
   deriving (Eq, Show)

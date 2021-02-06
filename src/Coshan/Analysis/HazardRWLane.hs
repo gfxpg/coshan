@@ -1,13 +1,13 @@
 {-# LANGUAGE PatternGuards #-}
 
-module Analysis.HazardRWLane (checkRwLaneHazards) where
+module Coshan.Analysis.HazardRWLane (checkRwLaneHazards) where
 
-import ControlFlow
+import Coshan.ControlFlow
+import Coshan.Disassembler
+import Coshan.Reporting
 import Data.Foldable (msum)
 import Data.List (find, isPrefixOf)
 import Data.Maybe (isJust)
-import Disassembler
-import Reporting
 
 checkRwLaneHazards :: DisassembledKernel -> CFG -> [LogMessage]
 checkRwLaneHazards _ cfg@(CFG bbs) = go [] bbs

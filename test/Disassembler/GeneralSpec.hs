@@ -2,8 +2,8 @@
 
 module Disassembler.GeneralSpec where
 
+import Coshan.Disassembler
 import qualified Data.ByteString as BStr
-import Disassembler
 import Test.Hspec
 
 spec :: Spec

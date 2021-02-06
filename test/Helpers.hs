@@ -4,14 +4,14 @@ module Helpers where
 
 import Control.Monad (unless, when)
 import Control.Monad.HT (andLazy)
-import ControlFlow
+import Coshan.ControlFlow
+import Coshan.Disassembler
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BStr
 import qualified Data.ByteString.Lazy.Char8 as BC8
 import Data.Digest.Pure.MD5 (md5)
 import Data.String.Interpolate (i)
 import Data.Tuple.Strict (mapSnd)
-import Disassembler
 import System.Directory (doesFileExist, getCurrentDirectory)
 import System.Exit (ExitCode (..))
 import System.Process (readProcessWithExitCode)

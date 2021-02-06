@@ -1,11 +1,11 @@
 {-# LANGUAGE GADTs #-}
 
-module Disassembler.InstructionParser (parseInstruction) where
+module Coshan.Disassembler.InstructionParser (parseInstruction) where
 
+import Coshan.Disassembler.Types
 import qualified Data.Char as Char
-import Data.List.Split (dropBlanks, dropDelims, oneOf, split)
 import Data.List (delete)
-import Disassembler.Types
+import Data.List.Split (dropBlanks, dropDelims, oneOf, split)
 
 parseInstruction :: String -> Instruction
 parseInstruction input = Instruction opcode operands

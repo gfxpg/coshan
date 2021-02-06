@@ -1,6 +1,6 @@
 module Disassembler.InstructionParserSpec where
 
-import Disassembler (Instruction (..), Operand (..), parseInstruction)
+import Coshan.Disassembler (Instruction (..), Operand (..), parseInstruction)
 import Test.Hspec
 
 spec :: Spec

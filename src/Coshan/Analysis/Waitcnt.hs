@@ -1,8 +1,10 @@
 {-# LANGUAGE TupleSections #-}
 
-module Analysis.Waitcnt (checkWaitcnts) where
+module Coshan.Analysis.Waitcnt (checkWaitcnts) where
 
-import ControlFlow
+import Coshan.ControlFlow
+import Coshan.Disassembler
+import Coshan.Reporting
 import Data.List (find, foldl')
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -10,8 +12,6 @@ import Data.Maybe (catMaybes, fromMaybe, isJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Debug.Trace
-import Disassembler
-import Reporting
 import Text.Regex.TDFA ((=~))
 
 checkWaitcnts :: DisassembledKernel -> CFG -> [LogMessage]

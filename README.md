@@ -1,4 +1,6 @@
-# hane
+# coshan
+
+_compute shader analyzer_
 
 ## prerequisites
 

@@ -2,13 +2,13 @@
 
 module Analysis.HazardRWLaneSpec where
 
-import Analysis.HazardRWLane
 import Control.Monad (forM_)
+import Coshan.Analysis.HazardRWLane
+import Coshan.Reporting
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BStr
 import Data.String.Interpolate (i)
 import Helpers
-import Reporting
 import Test.Hspec
 
 spec :: Spec

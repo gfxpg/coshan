@@ -1,12 +1,11 @@
-module ControlFlow (buildCfg, CFG (..), BasicBlock (..), BasicBlockIdx) where
+module Coshan.ControlFlow (buildCfg, CFG (..), BasicBlock (..), BasicBlockIdx) where
 
-import Analysis
 import Control.Applicative (Applicative (liftA2))
+import Coshan.Disassembler (Instruction (..), Operand (..), PC)
 import Data.List (find, findIndex, findIndices, isPrefixOf)
 import Data.Maybe (catMaybes)
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Disassembler (Instruction (..), Operand (..), PC)
 
 type BasicBlockIdx = Int
 
@@ -45,7 +44,7 @@ buildCfg instrs = CFG blocks''
         go bbs [_] is = BasicBlock is [] [] : bbs
         go bbs (_ : nextStartPc : rest) is =
           let (currInsts, nextBbInsts) = break ((== nextStartPc) . fst) is
-          in go (BasicBlock currInsts [] [] : bbs) (nextStartPc : rest) nextBbInsts
+           in go (BasicBlock currInsts [] [] : bbs) (nextStartPc : rest) nextBbInsts
     brs = branches instrs
 
 branches :: [(PC, Instruction)] -> [(PC, PC, Bool)] -- (branch instruction pc, branch target pc, taken?)

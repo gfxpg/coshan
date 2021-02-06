@@ -2,12 +2,12 @@
 
 module ControlFlow.GeneralSpec where
 
-import ControlFlow
+import Coshan.ControlFlow
+import Coshan.Disassembler
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BStr
 import Data.String.Interpolate (i)
 import Data.Tuple.Strict (mapSnd)
-import Disassembler
 import Helpers
 import Test.Hspec
 
