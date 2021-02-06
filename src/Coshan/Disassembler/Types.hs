@@ -17,7 +17,7 @@ data DisassembledKernel = DisassembledKernel
   { disasmKernelName :: !ByteString,
     disasmKernelCodeT :: !ByteString,
     disasmInstructionsBin :: !ByteString,
-    disasmInstructions :: ![(PC, String)]
+    disasmInstructions :: ![(PC, ByteString)]
   }
   deriving (Show)
 

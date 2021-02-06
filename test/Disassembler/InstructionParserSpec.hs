@@ -1,6 +1,9 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Disassembler.InstructionParserSpec where
 
-import Coshan.Disassembler (Instruction (..), Operand (..), parseInstruction)
+import Coshan.Disassembler (Instruction (..), Operand (..))
+import Coshan.Disassembler.InstructionParser (parseInstruction)
 import Test.Hspec
 
 spec :: Spec

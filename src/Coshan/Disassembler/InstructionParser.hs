@@ -1,39 +1,44 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Coshan.Disassembler.InstructionParser (parseInstruction) where
 
+import Control.Monad ((>=>))
 import Coshan.Disassembler.Types
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as BC8
 import qualified Data.Char as Char
 import Data.List (delete)
 import Data.List.Split (dropBlanks, dropDelims, oneOf, split)
 
-parseInstruction :: String -> Instruction
-parseInstruction input = Instruction opcode operands
+parseInstruction :: ByteString -> Instruction
+parseInstruction input = Instruction (BC8.unpack opcode) operands
   where
-    (opcode, opStr) = break (== ' ') input
-    operands = parseOperand <$> split (dropBlanks $ dropDelims $ oneOf " ,&") opStr
+    (opcode, opStr) = BC8.break (== ' ') input
+    operands = parseOperand <$> filter (not . BC8.null) (BC8.splitWith (`elem` [' ', ',', '&']) opStr)
 
-parseOperand :: String -> Operand
-parseOperand ('s' : regs@(i : _)) | i == '[' || Char.isDigit i = parseRegisterOperand Osgpr regs
-parseOperand ('v' : regs@(i : _)) | i == '[' || Char.isDigit i = parseRegisterOperand Ovgpr regs
-parseOperand ('t' : 't' : 'm' : 'p' : regs@(i : _)) | i == '[' || Char.isDigit i = parseRegisterOperand Ottmp regs
-parseOperand ('0' : 'x' : hex) = OConst $ parseNumber 16 hex
-parseOperand ('-' : dec) = OConst $ (-1) * parseNumber 10 dec
-parseOperand other
-  | all Char.isDigit other = OConst $ parseNumber 10 other
-  | otherwise = OOther other
-
-parseRegisterOperand :: ([Int] -> Operand) -> String -> Operand
-parseRegisterOperand ctr input = case break (== ':') input of
-  (idx, "") -> ctr [parseNumber 10 idx]
-  ('[' : from, ':' : to) ->
-    let fromIdx = parseNumber 10 from
-        toIdx = parseNumber 10 $ delete ']' to
-     in ctr $ enumFromTo fromIdx toIdx
-  _ -> error $ "Unable to parse register operand string \"" ++ input ++ "\""
-
-parseNumber :: Int -> String -> Int
-parseNumber base = go 0
+parseOperand :: ByteString -> Operand
+parseOperand str = case prefix of
+  's' | prefixRest == '[' || Char.isDigit prefixRest -> parseRegisterOperand Osgpr rest
+  'v' | prefixRest == '[' || Char.isDigit prefixRest -> parseRegisterOperand Ovgpr rest
+  't' | Just tmp <- BC8.stripPrefix "tmp" rest -> parseRegisterOperand Ottmp tmp
+  '0' | Just hex <- BC8.stripPrefix "x" rest -> OConst $ parseNumber 16 hex
+  '-' -> OConst $ (-1) * parseNumber 10 rest
+  _ | BC8.all Char.isDigit str -> OConst $ parseNumber 10 str
+  _ -> OOther $ BC8.unpack str
   where
-    go acc [] = acc
-    go acc (c : rest) = go (acc * base + Char.digitToInt c) rest
+    Just (prefix, rest) = BC8.uncons str
+    prefixRest = BC8.head rest
+
+parseRegisterOperand :: ([Int] -> Operand) -> ByteString -> Operand
+parseRegisterOperand ctr input = case BC8.break (== ':') input of
+  (idx, rest)
+    | BC8.null rest ->
+      ctr [parseNumber 10 idx]
+  (start, rest)
+    | Just from <- BC8.stripPrefix "[" start,
+      Just to <- (BC8.stripPrefix ":" >=> BC8.stripSuffix "]") rest ->
+      ctr $ enumFromTo (parseNumber 10 from) (parseNumber 10 to)
+  _ -> error $ "Unable to parse register operand string \"" ++ BC8.unpack input ++ "\""
+
+parseNumber :: Int -> ByteString -> Int
+parseNumber base = BC8.foldl' (\acc c -> acc * base + Char.digitToInt c) 0

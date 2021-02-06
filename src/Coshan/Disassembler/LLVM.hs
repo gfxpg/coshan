@@ -4,6 +4,7 @@ module Coshan.Disassembler.LLVM (LLVMDisasmContextRef, getLlvmRef, disassemble) 
 
 import Coshan.Disassembler.Types
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as BC8
 import qualified Data.ByteString.Internal as BStrInternal
 import Data.Word
 import Foreign.C.String
@@ -40,24 +41,23 @@ getLlvmRef target = do
   triple <- newCString $ disasmTriple target
   cpu <- newCString $ disasmCPU target
   ctxRefRaw <- llvmCreateDisasmCPU triple cpu nullPtr 0 nullPtr nullPtr
-  ctxRef <- newForeignPtr llvmDisasmDispose ctxRefRaw
-  pure $ ctxRef
+  newForeignPtr llvmDisasmDispose ctxRefRaw
 
-disassemble :: LLVMDisasmContextRef -> ByteString -> IO [(PC, String)]
+disassemble :: LLVMDisasmContextRef -> ByteString -> IO [(PC, ByteString)]
 disassemble ctxRef mcodeStr =
-  withForeignPtr mcodePtr $ \mcode -> do
+  withForeignPtr mcodePtr $ \mcode ->
     withForeignPtr ctxRef $ \ctx -> do
       outBufRef <- mallocForeignPtrBytes 256
       withForeignPtr outBufRef $ \outbuf -> do
-        let parseInstruction = \pos -> do
+        let disasmInstruction = \pos -> do
               posInc <- llvmDisasmInstruction ctx (mcode `plusPtr` pos) (fromIntegral $ mcodeLen - pos) 0 outbuf (CSize 256)
               let instStrWithoutLeadingTab = castPtr $ outbuf `plusPtr` 1
-              instStr <- peekCAString instStrWithoutLeadingTab
-              pure $ (pos + (fromIntegral posInc), instStr)
+              instStr <- BC8.packCString instStrWithoutLeadingTab
+              pure (pos + fromIntegral posInc, instStr)
         let parse = \pos acc ->
               if pos < mcodeLen
                 then
-                  parseInstruction pos >>= \(nextPos, inst) ->
+                  disasmInstruction pos >>= \(nextPos, inst) ->
                     parse nextPos ((fromIntegral pos, inst) : acc)
                 else pure $ reverse acc
         parse 0 []
