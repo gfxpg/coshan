@@ -42,11 +42,9 @@ spec = describe "parser" $ do
     parseInstruction "s_mov_b32 exec_lo, s1"
       `shouldBe` Instruction "s_mov_b32" [OOther "exec_lo", Osgpr [1]]
 
-  it "parses s_waitcnt operands" $ do
-    parseInstruction "s_waitcnt lgkmcnt(0) vmcnt(0) vscnt(0)"
-      `shouldBe` Instruction "s_waitcnt" [OOther "lgkmcnt(0)", OOther "vmcnt(0)", OOther "vscnt(0)"]
-    parseInstruction "s_waitcnt lgkmcnt(0) & vmcnt(0) & vscnt(0)"
-      `shouldBe` Instruction "s_waitcnt" [OOther "lgkmcnt(0)", OOther "vmcnt(0)", OOther "vscnt(0)"]
+  it "parses s_waitcnt operands" $
+    parseInstruction "s_waitcnt lgkmcnt(10) vmcnt(4) vscnt(0) expcnt(0)"
+      `shouldBe` Instruction "s_waitcnt" [Olgkmcnt 10, Ovmcnt 4, Ovscnt 0, Oexpcnt 0]
 
   it "parses ds instruction operands" $
     parseInstruction "ds_read2_b32 v[1:2], v0 offset0:0 offset1:4"

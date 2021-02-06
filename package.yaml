@@ -12,7 +12,6 @@ dependencies:
 - bytestring
 - elf
 - regex-tdfa
-- split
 
 library:
   source-dirs: src

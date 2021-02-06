@@ -11,6 +11,10 @@ data Operand
   | Ottmp [Int]
   | OConst Int
   | OOther String
+  | Ovmcnt Int
+  | Ovscnt Int
+  | Oexpcnt Int
+  | Olgkmcnt Int
   deriving (Eq, Show, Read)
 
 data DisassembledKernel = DisassembledKernel

@@ -52,9 +52,9 @@ spec = describe "cfg construction" $ do
         [ BasicBlock
             { bbInstructions =
                 [ (0, Instruction "s_load_dwordx2" [Osgpr [0, 1], Osgpr [4, 5], OConst 0]),
-                  (8, Instruction "s_waitcnt" [OOther "lgkmcnt(0)"]),
+                  (8, Instruction "s_waitcnt" [Olgkmcnt 0]),
                   (12, Instruction "s_load_dword" [Osgpr [2], Osgpr [0, 1], OConst 0]),
-                  (20, Instruction "s_waitcnt" [OOther "lgkmcnt(0)"]),
+                  (20, Instruction "s_waitcnt" [Olgkmcnt 0]),
                   (24, Instruction "v_mov_b32_e32" [Ovgpr [0], Osgpr [2]])
                 ],
               bbPredecessors = [],
@@ -73,7 +73,7 @@ spec = describe "cfg construction" $ do
           BasicBlock
             { bbInstructions =
                 [ (44, Instruction "s_load_dword" [Osgpr [2], Osgpr [0, 1], OConst 4]),
-                  (52, Instruction "s_waitcnt" [OOther "lgkmcnt(0)"]),
+                  (52, Instruction "s_waitcnt" [Olgkmcnt 0]),
                   (56, Instruction "v_mov_b32_e32" [Ovgpr [1], Osgpr [2]])
                 ],
               bbPredecessors = [1],

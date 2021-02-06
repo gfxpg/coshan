@@ -127,11 +127,10 @@ updateEventsOnWaitcnt waitops = Map.mapMaybe dropEvents
             waitedFor ty c = case find ((== ty) . fst) eventsWaitedFor of
               Just (_, cWaited) | c >= cWaited -> True
               _ -> False
-    eventsWaitedFor = parseWaitClause =<< waitops
-    parseWaitClause :: Operand -> [(MemEvent, Int)]
-    parseWaitClause (OOther expr)
-      | [[_, c]] <- expr =~ "vmcnt\\(([0-9]+)\\)" = [(EventVMem, read c)]
-      | otherwise = []
+    eventsWaitedFor = opToEvents =<< waitops
+    opToEvents (Ovmcnt c) = [(EventVMem, c)]
+    opToEvents (Olgkmcnt c) = [(EventSLoad, c), (EventLDS, c)]
+    opToEvents _ = []
 
 incExistingEvents :: PC -> [MemEvent] -> BbMemEvents -> BbMemEvents
 incExistingEvents pc events = Map.map $ Map.map $ Map.mapWithKey (\ty c -> if ty `elem` events then c + 1 else c)

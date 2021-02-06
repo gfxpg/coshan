@@ -8,13 +8,12 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC8
 import qualified Data.Char as Char
 import Data.List (delete)
-import Data.List.Split (dropBlanks, dropDelims, oneOf, split)
 
 parseInstruction :: ByteString -> Instruction
 parseInstruction input = Instruction (BC8.unpack opcode) operands
   where
     (opcode, opStr) = BC8.break (== ' ') input
-    operands = parseOperand <$> filter (not . BC8.null) (BC8.splitWith (`elem` [' ', ',', '&']) opStr)
+    operands = parseOperand <$> filter (not . BC8.null) (BC8.splitWith (\c -> c == ' ' || c == ',') opStr)
 
 parseOperand :: ByteString -> Operand
 parseOperand str = case prefix of
@@ -23,6 +22,10 @@ parseOperand str = case prefix of
   't' | Just tmp <- BC8.stripPrefix "tmp" rest -> parseRegisterOperand Ottmp tmp
   '0' | Just hex <- BC8.stripPrefix "x" rest -> OConst $ parseNumber 16 hex
   '-' -> OConst $ (-1) * parseNumber 10 rest
+  'v' | Just (c, _) <- (BC8.stripPrefix "mcnt(" >=> BC8.readInt) rest -> Ovmcnt c
+  'v' | Just (c, _) <- (BC8.stripPrefix "scnt(" >=> BC8.readInt) rest -> Ovscnt c
+  'l' | Just (c, _) <- (BC8.stripPrefix "gkmcnt(" >=> BC8.readInt) rest -> Olgkmcnt c
+  'e' | Just (c, _) <- (BC8.stripPrefix "xpcnt(" >=> BC8.readInt) rest -> Oexpcnt c
   _ | BC8.all Char.isDigit str -> OConst $ parseNumber 10 str
   _ -> OOther $ BC8.unpack str
   where
