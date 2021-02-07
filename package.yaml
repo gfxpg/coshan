@@ -12,6 +12,10 @@ dependencies:
 - bytestring
 - elf
 
+ghc-options:
+- -Wall
+- -Wno-name-shadowing
+
 library:
   source-dirs: src
   cc-options: -fPIC

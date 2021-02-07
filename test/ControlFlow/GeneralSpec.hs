@@ -6,7 +6,6 @@ module ControlFlow.GeneralSpec where
 import Coshan.ControlFlow
 import Coshan.Disassembler
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as BStr
 import Data.String.Interpolate (i)
 import Data.Tuple.Strict (mapSnd)
 import Helpers

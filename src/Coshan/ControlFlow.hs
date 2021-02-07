@@ -2,11 +2,9 @@
 
 module Coshan.ControlFlow (buildCfg, CFG (..), BasicBlock (..), BasicBlockIdx) where
 
-import Control.Applicative (Applicative (liftA2))
 import Coshan.Disassembler (Instruction (..), Operand (..), PC)
-import Data.List (find, findIndex, findIndices, isPrefixOf)
+import Data.List (findIndex, findIndices)
 import Data.Maybe (catMaybes)
-import Data.Set (Set)
 import qualified Data.Set as Set
 
 type BasicBlockIdx = Int
@@ -28,7 +26,7 @@ buildCfg instrs = CFG blocks''
       where
         fillSuccs (BasicBlock instructions _ _) = BasicBlock instructions [] succBbs
           where
-            ((bbStartPc, _), (bbEndPc, bbLastInstr)) = liftA2 (,) head last instructions
+            (bbEndPc, bbLastInstr) = last instructions
             succBbs = catMaybes $ immediateSucc : (successor <$> brs)
             immediateSucc
               | not bbEndsWithBranch = findIndex (\(BasicBlock ((startPc, _) : _) _ _) -> startPc > bbEndPc) blocks

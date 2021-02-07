@@ -3,9 +3,7 @@
 module Disassembler.GeneralSpec where
 
 import Coshan.Disassembler
-import Coshan.Disassembler.InstructionParser (parseInstruction)
 import qualified Data.ByteString as BStr
-import Helpers
 import Test.Hspec
 
 spec :: Spec

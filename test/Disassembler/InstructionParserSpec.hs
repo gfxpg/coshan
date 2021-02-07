@@ -4,7 +4,6 @@
 module Disassembler.InstructionParserSpec where
 
 import Coshan.Disassembler
-import Coshan.Disassembler.InstructionParser (parseInstruction)
 import Data.String.Interpolate (i)
 import Helpers
 import Test.Hspec

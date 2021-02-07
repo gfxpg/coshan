@@ -7,11 +7,9 @@ import Coshan.Disassembler
 import Coshan.Reporting
 import qualified Data.ByteString.Char8 as BC8
 import Data.Foldable (msum)
-import Data.List (find, isPrefixOf)
-import Data.Maybe (isJust)
 
 checkRwLaneHazards :: DisassembledKernel -> CFG -> [LogMessage]
-checkRwLaneHazards _ cfg@(CFG bbs) = go [] bbs
+checkRwLaneHazards _ (CFG bbs) = go [] bbs
   where
     go log [] = log
     go log (bb : rest) = go (log ++ analyzeBb (CFG bbs) bb) rest
@@ -29,7 +27,7 @@ analyzeBb (CFG bbs) currBb = analyzeInstructions ([], bbInstructions currBb) []
     analyzeInstructions (_, []) log = log
     analyzeInstructions (prev, (pc, i) : next) log =
       case i of
-        Instruction opcode@("v" : vop : _) [dst, src, Osgpr [selector]]
+        Instruction opcode@("v" : vop : _) [_dst, _src, Osgpr [selector]]
           | vop == "readlane" || vop == "writelane",
             iterCtx <- WaitStatesIterCtx {reverseBbInsts = prev, predBbIdxs = bbPredecessors currBb, walkedInsts = [], walkedBbIdxs = []},
             Just (missingStates, path) <- missingWaitStatesPath 4 selector iterCtx ->

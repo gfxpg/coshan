@@ -10,13 +10,12 @@ import qualified Data.ByteString.Char8 as BC8
 import Data.List (find, foldl')
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (catMaybes, fromMaybe, isJust)
-import Data.Set (Set)
+import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Debug.Trace
 
 checkWaitcnts :: DisassembledKernel -> CFG -> [LogMessage]
-checkWaitcnts _ cfg@(CFG bbs) = Map.foldrWithKey' printMessage [] logMap
+checkWaitcnts _ cfg = Map.foldrWithKey' printMessage [] logMap
   where
     emptyCtx = IterCtx {ctxInEvents = Map.singleton 0 Map.empty, ctxLog = Map.empty}
     logMap = ctxLog $ analyzeCfg cfg emptyCtx 0

@@ -7,7 +7,6 @@ import Coshan.Disassembler.Types
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC8
 import qualified Data.Char as Char
-import Data.List (delete)
 
 parseInstruction :: ByteString -> Instruction
 parseInstruction input = Instruction opcode operands
