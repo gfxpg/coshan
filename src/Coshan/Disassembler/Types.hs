@@ -10,6 +10,7 @@ data Operand
   | Ovgpr [Int]
   | Ottmp [Int]
   | OConst Int
+  | OConstF Float
   | OOther String
   | Ovmcnt Int
   | Ovscnt Int

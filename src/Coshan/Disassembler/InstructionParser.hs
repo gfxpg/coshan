@@ -21,13 +21,20 @@ parseOperand str = case prefix of
   'v' | prefixRest == '[' || Char.isDigit prefixRest -> parseRegisterOperand Ovgpr rest
   't' | Just tmp <- BC8.stripPrefix "tmp" rest -> parseRegisterOperand Ottmp tmp
   '0' | Just hex <- BC8.stripPrefix "x" rest -> OConst $ parseNumber 16 hex
-  '-' -> OConst $ (-1) * parseNumber 10 rest
   'v' | Just (c, _) <- (BC8.stripPrefix "mcnt(" >=> BC8.readInt) rest -> Ovmcnt c
   'v' | Just (c, _) <- (BC8.stripPrefix "scnt(" >=> BC8.readInt) rest -> Ovscnt c
   'l' | Just (c, _) <- (BC8.stripPrefix "gkmcnt(" >=> BC8.readInt) rest -> Olgkmcnt c
   'e' | Just (c, _) <- (BC8.stripPrefix "xpcnt(" >=> BC8.readInt) rest -> Oexpcnt c
-  _ | BC8.all Char.isDigit str -> OConst $ parseNumber 10 str
-  _ -> OOther $ BC8.unpack str
+  _ -> case BC8.readInt str of
+    Just (int, "") -> OConst int
+    Just (int, rest)
+      | Just ('.', fracStr) <- BC8.uncons rest,
+        Just (frac, "") <- BC8.readInt fracStr ->
+        let sign = if prefix == '-' then -1.0 else 1.0
+            fracFloat = fromIntegral frac / 10 ** fromIntegral (BC8.length fracStr)
+            intFloat = fromIntegral (abs int)
+         in OConstF $ sign * (intFloat + fracFloat)
+    _ -> OOther $ BC8.unpack str
   where
     Just (prefix, rest) = BC8.uncons str
     prefixRest = BC8.head rest

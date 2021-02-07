@@ -62,8 +62,8 @@ spec = describe "cfg construction" $ do
             },
           BasicBlock
             { bbInstructions =
-                [ (28, Instruction "v_add_f32_e32" [Ovgpr [0], OOther "1.0", Ovgpr [0]]),
-                  (32, Instruction "v_cmp_lt_f32_e32" [OOther "vcc", OOther "1.0", Ovgpr [0]]),
+                [ (28, Instruction "v_add_f32_e32" [Ovgpr [0], OConstF 1.0, Ovgpr [0]]),
+                  (32, Instruction "v_cmp_lt_f32_e32" [OOther "vcc", OConstF 1.0, Ovgpr [0]]),
                   (36, Instruction "s_and_b64" [OOther "vcc", OOther "exec", OOther "vcc"]),
                   (40, Instruction "s_cbranch_vccnz" [OConst 65532])
                 ],
@@ -81,8 +81,8 @@ spec = describe "cfg construction" $ do
             },
           BasicBlock
             { bbInstructions =
-                [ (60, Instruction "v_add_f32_e32" [Ovgpr [0], OOther "1.0", Ovgpr [0]]),
-                  (64, Instruction "v_cmp_nlt_f32_e32" [OOther "vcc", OOther "1.0", Ovgpr [0]]),
+                [ (60, Instruction "v_add_f32_e32" [Ovgpr [0], OConstF 1.0, Ovgpr [0]]),
+                  (64, Instruction "v_cmp_nlt_f32_e32" [OOther "vcc", OConstF 1.0, Ovgpr [0]]),
                   (68, Instruction "v_add_f32_e32" [Ovgpr [1], OConst 1084227584, Ovgpr [1]]),
                   (76, Instruction "s_and_b64" [OOther "vcc", OOther "exec", OOther "vcc"]),
                   (80, Instruction "s_cbranch_vccnz" [OConst 65530])
