@@ -28,6 +28,7 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
         |]
     checkWaitcnts kernel cfg
       `shouldBe` [LogMessage 16 [LogText "Missing", LogInstruction "s_waitcnt vmcnt(1)", LogText "before accessing register", LogOperand (Ovgpr [2]), LogText "read from memory at", LogInstructionPath [0]]]
+
   it "checks scalar memory read instructions" $ do
     (cfg, kernel) <-
       loadGfx900Kernel
@@ -44,7 +45,6 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
           buffer_store_dword v2, off, s[8:11], 0 offset:4  // PC = 60
           buffer_store_dword v3, off, s[8:11], 0 offset:8  // PC = 68
         |]
-    print cfg
     checkWaitcnts kernel cfg
       `shouldBe` [ LogMessage 24 [LogText "Missing", LogInstruction "s_waitcnt lgkmcnt(0)", LogText "before accessing register", LogOperand (Osgpr [0]), LogText "read from memory at", LogInstructionPath [0]],
                    LogMessage 52 [LogText "Missing", LogInstruction "s_waitcnt lgkmcnt(0)", LogText "before accessing register", LogOperand (Osgpr [11]), LogText "read from memory at", LogInstructionPath [8]],
@@ -52,31 +52,40 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
                    LogMessage 60 [LogText "Missing", LogInstruction "s_waitcnt lgkmcnt(1)", LogText "before accessing register", LogOperand (Ovgpr [2]), LogText "read from memory at", LogInstructionPath [32]],
                    LogMessage 68 [LogText "Missing", LogInstruction "s_waitcnt lgkmcnt(0)", LogText "before accessing register", LogOperand (Ovgpr [3]), LogText "read from memory at", LogInstructionPath [44]]
                  ]
-  it "recognizes s_waitcnt vmcnt(N)" $ do
+
+  it "recognizes s_waitcnt vmcnt(N) lgkmcnt(N)" $ do
     (cfg, kernel) <-
       loadGfx900Kernel
         [i|waitcnt_buffer_load|]
         [i|
-        buffer_load_dwordx4 v[0:3], off, s[0:3], 0           // PC = 0
-        buffer_load_dwordx4 v[4:7], off, s[0:3], 0 offset:16 // PC = 8
-        s_waitcnt vmcnt(1)                                   // PC = 16
-        v_add_f32 v0, v2, 1.0                                // PC = 20
-        v_add_f32 v0, v0, v4                                 // PC = 28
-      |]
+          buffer_load_dwordx4 v[0:3], off, s[0:3], 0           // PC = 0
+          buffer_load_dwordx4 v[4:7], off, s[0:3], 0 offset:16 // PC = 8
+          s_waitcnt vmcnt(1)                                   // PC = 16
+          ds_read_b32 v0, v0                                   // PC = 20
+          ds_read_b32 v4, v4                                   // PC = 28
+          s_waitcnt lgkmcnt(1)                                 // PC = 36
+          v_add_f32 v2, v0, 1.0                                // PC = 40
+          v_add_f32 v0, v0, v4                                 // PC = 48
+        |]
     checkWaitcnts kernel cfg
-      `shouldBe` [LogMessage 28 [LogText "Missing", LogInstruction "s_waitcnt vmcnt(0)", LogText "before accessing register", LogOperand (Ovgpr [4]), LogText "read from memory at", LogInstructionPath [8]]]
+      `shouldBe` [ LogMessage 28 [LogText "Missing", LogInstruction "s_waitcnt vmcnt(0)", LogText "before accessing register", LogOperand (Ovgpr [4]), LogText "read from memory at", LogInstructionPath [8]],
+                   LogMessage 48 [LogText "Missing", LogInstruction "s_waitcnt lgkmcnt(0)", LogText "before accessing register", LogOperand (Ovgpr [4]), LogText "read from memory at", LogInstructionPath [28]]
+                 ]
+
   it "recognizes s_waitcnt 0" $ do
     (cfg, kernel) <-
       loadGfx900Kernel
         [i|waitcnt_buffer_load|]
         [i|
-        buffer_load_dwordx4 v[0:3], off, s[0:3], 0           // PC = 0
-        buffer_load_dwordx4 v[4:7], off, s[0:3], 0 offset:16 // PC = 8
-        s_waitcnt 0                                          // PC = 16
-        v_add_f32 v0, v2, 1.0                                // PC = 20
-        v_add_f32 v0, v0, v4                                 // PC = 28
-      |]
+          buffer_load_dwordx4 v[0:3], off, s[0:3], 0           // PC = 0
+          buffer_load_dwordx4 v[4:7], off, s[0:3], 0 offset:16 // PC = 8
+          ds_read_b32 v8, v8                                   // PC = 16
+          s_waitcnt 0                                          // PC = 24
+          v_add_f32 v0, v2, v8                                 // PC = 28
+          v_add_f32 v0, v0, v4                                 // PC = 36
+        |]
     checkWaitcnts kernel cfg `shouldBe` []
+
   it "recognizes dependencies in loops" $ do
     (cfg, kernel) <-
       loadGfx900Kernel

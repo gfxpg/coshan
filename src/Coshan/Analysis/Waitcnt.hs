@@ -72,8 +72,6 @@ analyzeCfg (CFG bbs) ctx bbIdx = foldr analyzeSuccessor ctx {ctxLog = Map.union 
     analyzeInstructions [] (bbEvents, log) = (bbEvents, log)
     analyzeInstructions ((pc, i) : next) (bbEvents, log) =
       case i of
-        Instruction ["s", "waitcnt"] [OConst 0] ->
-          analyzeInstructions next (Map.empty, log)
         Instruction ["s", "waitcnt"] expr ->
           analyzeInstructions next (updateEventsOnWaitcnt expr bbEvents, log)
         Instruction _ _ ->
@@ -131,7 +129,8 @@ updateEventsOnWaitcnt waitops = Map.mapMaybe dropEvents
     eventsWaitedFor = opToEvents =<< waitops
     opToEvents (Ovmcnt c) = [(EventVMem, c)]
     opToEvents (Olgkmcnt c) = [(EventSLoad, c), (EventLDS, c)]
-    opToEvents _ = []
+    opToEvents (Oexpcnt _) = []
+    opToEvents o = error $ "Unexpected s_waitcnt operand " ++ show o
 
 incExistingEvents :: PC -> [MemEvent] -> BbMemEvents -> BbMemEvents
 incExistingEvents pc events = Map.map $ Map.map $ Map.mapWithKey (\ty c -> if ty `elem` events then c + 1 else c)
