@@ -9,9 +9,9 @@ import Coshan.ControlFlow
 import Coshan.Disassembler
 import Coshan.Reporting
 import Data.Bifunctor (second)
-import qualified Data.ByteString as BStr
+import qualified Data.ByteString as B
+import Format.Cfg (printCfg)
 import System.Console.CmdArgs
-import Text.Pretty.Simple
 
 data Opts = Opts
   { optCpu, optTriple :: String,
@@ -20,6 +20,7 @@ data Opts = Opts
   }
   deriving (Data, Typeable, Show)
 
+opts :: Opts
 opts =
   Opts
     { optCpu = "gfx900" &= explicit &= name "mcpu" &= typ "gfx900" &= help "Target CPU type for disassembly (run `llc -march=amdgcn -mcpu=help` for a list of available CPUs)",
@@ -37,7 +38,7 @@ main = do
 
   let target = DisasmTarget {disasmTriple = optTriple args, disasmCPU = optCpu args}
 
-  co <- BStr.readFile (optCo args)
+  co <- B.readFile (optCo args)
   kernel <- head <$> readElf target co
 
   let instructions = second parseInstruction <$> disasmInstructions kernel
@@ -45,18 +46,11 @@ main = do
 
   case args of
     Opts {optDumpCfg = True} -> do
-      let formatting =
-            defaultOutputOptionsDarkBg
-              { outputOptionsCompact = True,
-                outputOptionsCompactParens = True,
-                outputOptionsIndentAmount = 2,
-                outputOptionsPageWidth = 200
-              }
-      pPrintOpt CheckColorTty formatting cfg
+      printCfg cfg
     _ -> do
       report "waitcnt" (checkWaitcnts kernel cfg)
       report "s_nop" (checkRwLaneHazards kernel cfg)
 
 report :: String -> [LogMessage] -> IO ()
 report analyzer [] = putStrLn (analyzer ++ ": OK")
-report analyzer log = putStrLn (analyzer ++ ":") >> pPrint log
+report analyzer log = putStrLn (analyzer ++ ":") >> print log
