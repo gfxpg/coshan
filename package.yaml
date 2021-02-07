@@ -11,7 +11,6 @@ dependencies:
 - containers
 - bytestring
 - elf
-- regex-tdfa
 
 library:
   source-dirs: src

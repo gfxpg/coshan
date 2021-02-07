@@ -1,37 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes #-}
 
 module Disassembler.GeneralSpec where
 
 import Coshan.Disassembler
 import Coshan.Disassembler.InstructionParser (parseInstruction)
 import qualified Data.ByteString as BStr
-import Data.String.Interpolate (i)
 import Helpers
 import Test.Hspec
 
 spec :: Spec
 spec = describe "disassembler" $ do
-  it "parses float literals" $ do
-    elf <-
-      compileAsmKernel DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"} "disasm_float_lits" $
-        [i|
-          v_add_f32_e32 v0, 1.0, v0
-          v_add_f32_e32 v0, -1.0, v0
-          v_add_f32_e32 v0, 0.5, v0
-          v_add_f32_e32 v0, -0.5, v0
-          v_add_f32_e32 v0, 0.15915494, v0
-        |]
-    kernel <- head <$> readElf (DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"}) elf
-    let instructions = parseInstruction . snd <$> disasmInstructions kernel
-    instructions
-      `shouldBe` [ Instruction "v_add_f32_e32" [Ovgpr [0], OConstF 1.0, Ovgpr [0]],
-                   Instruction "v_add_f32_e32" [Ovgpr [0], OConstF (-1.0), Ovgpr [0]],
-                   Instruction "v_add_f32_e32" [Ovgpr [0], OConstF 0.5, Ovgpr [0]],
-                   Instruction "v_add_f32_e32" [Ovgpr [0], OConstF (-0.5), Ovgpr [0]],
-                   Instruction "v_add_f32_e32" [Ovgpr [0], OConstF 0.15915494, Ovgpr [0]]
-                 ]
-
   it "extracts assembly code for all kernels in an ELF binary" $ do
     elf <- BStr.readFile "test/Disassembler/Cases/kernels.hsaco"
     kernels <- readElf (DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"}) elf

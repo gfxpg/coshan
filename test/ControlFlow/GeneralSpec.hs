@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
 module ControlFlow.GeneralSpec where
@@ -51,51 +52,51 @@ spec = describe "cfg construction" $ do
       `shouldBe` CFG
         [ BasicBlock
             { bbInstructions =
-                [ (0, Instruction "s_load_dwordx2" [Osgpr [0, 1], Osgpr [4, 5], OConst 0]),
-                  (8, Instruction "s_waitcnt" [Olgkmcnt 0]),
-                  (12, Instruction "s_load_dword" [Osgpr [2], Osgpr [0, 1], OConst 0]),
-                  (20, Instruction "s_waitcnt" [Olgkmcnt 0]),
-                  (24, Instruction "v_mov_b32_e32" [Ovgpr [0], Osgpr [2]])
+                [ (0, Instruction ["s", "load", "dwordx2"] [Osgpr [0, 1], Osgpr [4, 5], OConst 0]),
+                  (8, Instruction ["s", "waitcnt"] [Olgkmcnt 0]),
+                  (12, Instruction ["s", "load", "dword"] [Osgpr [2], Osgpr [0, 1], OConst 0]),
+                  (20, Instruction ["s", "waitcnt"] [Olgkmcnt 0]),
+                  (24, Instruction ["v", "mov", "b32", "e32"] [Ovgpr [0], Osgpr [2]])
                 ],
               bbPredecessors = [],
               bbSuccessors = [1]
             },
           BasicBlock
             { bbInstructions =
-                [ (28, Instruction "v_add_f32_e32" [Ovgpr [0], OConstF 1.0, Ovgpr [0]]),
-                  (32, Instruction "v_cmp_lt_f32_e32" [OOther "vcc", OConstF 1.0, Ovgpr [0]]),
-                  (36, Instruction "s_and_b64" [OOther "vcc", OOther "exec", OOther "vcc"]),
-                  (40, Instruction "s_cbranch_vccnz" [OConst 65532])
+                [ (28, Instruction ["v", "add", "f32", "e32"] [Ovgpr [0], OConstF 1.0, Ovgpr [0]]),
+                  (32, Instruction ["v", "cmp", "lt", "f32", "e32"] [OCtrl "vcc", OConstF 1.0, Ovgpr [0]]),
+                  (36, Instruction ["s", "and", "b64"] [OCtrl "vcc", OCtrl "exec", OCtrl "vcc"]),
+                  (40, Instruction ["s", "cbranch", "vccnz"] [OConst 65532])
                 ],
               bbPredecessors = [0, 1, 4],
               bbSuccessors = [1, 2]
             },
           BasicBlock
             { bbInstructions =
-                [ (44, Instruction "s_load_dword" [Osgpr [2], Osgpr [0, 1], OConst 4]),
-                  (52, Instruction "s_waitcnt" [Olgkmcnt 0]),
-                  (56, Instruction "v_mov_b32_e32" [Ovgpr [1], Osgpr [2]])
+                [ (44, Instruction ["s", "load", "dword"] [Osgpr [2], Osgpr [0, 1], OConst 4]),
+                  (52, Instruction ["s", "waitcnt"] [Olgkmcnt 0]),
+                  (56, Instruction ["v", "mov", "b32", "e32"] [Ovgpr [1], Osgpr [2]])
                 ],
               bbPredecessors = [1],
               bbSuccessors = [3]
             },
           BasicBlock
             { bbInstructions =
-                [ (60, Instruction "v_add_f32_e32" [Ovgpr [0], OConstF 1.0, Ovgpr [0]]),
-                  (64, Instruction "v_cmp_nlt_f32_e32" [OOther "vcc", OConstF 1.0, Ovgpr [0]]),
-                  (68, Instruction "v_add_f32_e32" [Ovgpr [1], OConst 1084227584, Ovgpr [1]]),
-                  (76, Instruction "s_and_b64" [OOther "vcc", OOther "exec", OOther "vcc"]),
-                  (80, Instruction "s_cbranch_vccnz" [OConst 65530])
+                [ (60, Instruction ["v", "add", "f32", "e32"] [Ovgpr [0], OConstF 1.0, Ovgpr [0]]),
+                  (64, Instruction ["v", "cmp", "nlt", "f32", "e32"] [OCtrl "vcc", OConstF 1.0, Ovgpr [0]]),
+                  (68, Instruction ["v", "add", "f32", "e32"] [Ovgpr [1], OConst 1084227584, Ovgpr [1]]),
+                  (76, Instruction ["s", "and", "b64"] [OCtrl "vcc", OCtrl "exec", OCtrl "vcc"]),
+                  (80, Instruction ["s", "cbranch", "vccnz"] [OConst 65530])
                 ],
               bbPredecessors = [2, 3],
               bbSuccessors = [3, 4]
             },
           BasicBlock
             { bbInstructions =
-                [ (84, Instruction "v_mov_b32_e32" [Ovgpr [3], Osgpr [1]]),
-                  (88, Instruction "v_mov_b32_e32" [Ovgpr [2], Osgpr [0]]),
-                  (92, Instruction "global_store_dword" [Ovgpr [2, 3], Ovgpr [1], OOther "off", OOther "offset:4"]),
-                  (100, Instruction "s_branch" [OConst 65517])
+                [ (84, Instruction ["v", "mov", "b32", "e32"] [Ovgpr [3], Osgpr [1]]),
+                  (88, Instruction ["v", "mov", "b32", "e32"] [Ovgpr [2], Osgpr [0]]),
+                  (92, Instruction ["global", "store", "dword"] [Ovgpr [2, 3], Ovgpr [1], OCtrl "off", OCtrl "offset:4"]),
+                  (100, Instruction ["s", "branch"] [OConst 65517])
                 ],
               bbPredecessors = [3],
               bbSuccessors = [1]

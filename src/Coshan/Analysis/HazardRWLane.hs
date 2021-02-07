@@ -1,10 +1,11 @@
-{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Coshan.Analysis.HazardRWLane (checkRwLaneHazards) where
 
 import Coshan.ControlFlow
 import Coshan.Disassembler
 import Coshan.Reporting
+import qualified Data.ByteString.Char8 as BC8
 import Data.Foldable (msum)
 import Data.List (find, isPrefixOf)
 import Data.Maybe (isJust)
@@ -28,13 +29,13 @@ analyzeBb (CFG bbs) currBb = analyzeInstructions ([], bbInstructions currBb) []
     analyzeInstructions (_, []) log = log
     analyzeInstructions (prev, (pc, i) : next) log =
       case i of
-        Instruction opcode [dst, src, Osgpr [selector]]
-          | opcode == "v_readlane_b32" || opcode == "v_writelane_b32",
+        Instruction opcode@("v" : vop : _) [dst, src, Osgpr [selector]]
+          | vop == "readlane" || vop == "writelane",
             iterCtx <- WaitStatesIterCtx {reverseBbInsts = prev, predBbIdxs = bbPredecessors currBb, walkedInsts = [], walkedBbIdxs = []},
             Just (missingStates, path) <- missingWaitStatesPath 4 selector iterCtx ->
             let missingStatesText = if missingStates == 1 then "1 wait state" else show missingStates ++ " wait states"
                 text =
-                  [ LogText ("Missing " ++ missingStatesText ++ " for " ++ opcode ++ " with an SGPR lane selector modified by a VALU instruction:"),
+                  [ LogText ("Missing " ++ missingStatesText ++ " for " ++ BC8.unpack (BC8.intercalate "_" opcode) ++ " with an SGPR lane selector modified by a VALU instruction:"),
                     LogInstructionPath (fst <$> path)
                   ]
              in analyzeInstructions ((pc, i) : prev, next) (LogMessage pc text : log)
@@ -44,14 +45,13 @@ analyzeBb (CFG bbs) currBb = analyzeInstructions ([], bbInstructions currBb) []
     missingWaitStatesPath minStates sgprIdx ctx@WaitStatesIterCtx {reverseBbInsts = ((pc, i) : prevInstsInBb)} =
       case i of
         -- Only VOP3B instruction perform VALU operations with an SGPR destination reg
-        Instruction opcode [_vdst, Osgpr sdst, _src0, _src1]
-          | "v_" `isPrefixOf` opcode,
-            sgprIdx `elem` sdst ->
+        Instruction ("v" : _) [_vdst, Osgpr sdst, _src0, _src1]
+          | sgprIdx `elem` sdst ->
             Just (minStates, (pc, i) : walkedInsts ctx)
         _ ->
           let states =
                 case i of
-                  Instruction "s_nop" [OConst states] -> 1 + states
+                  Instruction ["s", "nop"] [OConst states] -> 1 + states
                   _ -> 1
            in missingWaitStatesPath (minStates - states) sgprIdx ctx {reverseBbInsts = prevInstsInBb, walkedInsts = (pc, i) : walkedInsts ctx}
     missingWaitStatesPath minStates sgprIdx ctx@WaitStatesIterCtx {reverseBbInsts = [], predBbIdxs = bbIdxs} =

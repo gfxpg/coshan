@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Coshan.ControlFlow (buildCfg, CFG (..), BasicBlock (..), BasicBlockIdx) where
 
 import Control.Applicative (Applicative (liftA2))
@@ -35,8 +37,8 @@ buildCfg instrs = CFG blocks''
               | brPc == bbEndPc = findIndex (\(BasicBlock ((startPc, _) : _) _ _) -> startPc == brTargetPc) blocks
               | otherwise = Nothing
             bbEndsWithBranch = case bbLastInstr of
-              Instruction "s_branch" _ -> True
-              Instruction opcode _ | "s_cbranch" `isPrefixOf` opcode -> True
+              Instruction ["s", "branch"] _ -> True
+              Instruction ("s" : "cbranch" : _) _ -> True
               _ -> False
     blocks = reverse $ go [] blockStarts instrs
       where
@@ -57,9 +59,9 @@ branches = go []
             nextPc = pc + 4
             targetPc = nextPc + branchOffset * 4
          in case opcode of
-              "s_branch" ->
+              ["s", "branch"] ->
                 go ((pc, targetPc, True) : brs) instrs
-              's' : '_' : 'c' : 'b' : 'r' : 'a' : 'n' : 'c' : 'h' : _ ->
+              "s" : "cbranch" : _ ->
                 go ((pc, targetPc, True) : (pc, nextPc, False) : brs) instrs
               _ ->
                 go brs instrs

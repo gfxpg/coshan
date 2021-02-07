@@ -2,20 +2,19 @@ module Coshan.Disassembler.Types where
 
 import Data.ByteString (ByteString)
 
-data Instruction = Instruction String [Operand]
+data Instruction = Instruction [ByteString] [Operand]
   deriving (Eq, Show, Read)
 
 data Operand
   = Osgpr [Int]
   | Ovgpr [Int]
   | Ottmp [Int]
-  | OConst Int
-  | OConstF Float
-  | OOther String
   | Ovmcnt Int
-  | Ovscnt Int
   | Oexpcnt Int
   | Olgkmcnt Int
+  | OConst Int
+  | OConstF Float
+  | OCtrl ByteString
   deriving (Eq, Show, Read)
 
 data DisassembledKernel = DisassembledKernel

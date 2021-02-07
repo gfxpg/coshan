@@ -10,9 +10,10 @@ import qualified Data.Char as Char
 import Data.List (delete)
 
 parseInstruction :: ByteString -> Instruction
-parseInstruction input = Instruction (BC8.unpack opcode) operands
+parseInstruction input = Instruction opcode operands
   where
-    (opcode, opStr) = BC8.break (== ' ') input
+    (opcodeStr, opStr) = BC8.break (== ' ') input
+    opcode = BC8.split '_' opcodeStr
     operands = parseOperand <$> filter (not . BC8.null) (BC8.splitWith (\c -> c == ' ' || c == ',') opStr)
 
 parseOperand :: ByteString -> Operand
@@ -22,7 +23,6 @@ parseOperand str = case prefix of
   't' | Just tmp <- BC8.stripPrefix "tmp" rest -> parseRegisterOperand Ottmp tmp
   '0' | Just hex <- BC8.stripPrefix "x" rest -> OConst $ parseNumber 16 hex
   'v' | Just (c, _) <- (BC8.stripPrefix "mcnt(" >=> BC8.readInt) rest -> Ovmcnt c
-  'v' | Just (c, _) <- (BC8.stripPrefix "scnt(" >=> BC8.readInt) rest -> Ovscnt c
   'l' | Just (c, _) <- (BC8.stripPrefix "gkmcnt(" >=> BC8.readInt) rest -> Olgkmcnt c
   'e' | Just (c, _) <- (BC8.stripPrefix "xpcnt(" >=> BC8.readInt) rest -> Oexpcnt c
   _ -> case BC8.readInt str of
@@ -34,7 +34,7 @@ parseOperand str = case prefix of
             fracFloat = fromIntegral frac / 10 ** fromIntegral (BC8.length fracStr)
             intFloat = fromIntegral (abs int)
          in OConstF $ sign * (intFloat + fracFloat)
-    _ -> OOther $ BC8.unpack str
+    _ -> OCtrl str
   where
     Just (prefix, rest) = BC8.uncons str
     prefixRest = BC8.head rest

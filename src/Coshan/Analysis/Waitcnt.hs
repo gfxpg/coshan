@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
 module Coshan.Analysis.Waitcnt (checkWaitcnts) where
@@ -5,6 +6,7 @@ module Coshan.Analysis.Waitcnt (checkWaitcnts) where
 import Coshan.ControlFlow
 import Coshan.Disassembler
 import Coshan.Reporting
+import qualified Data.ByteString.Char8 as BC8
 import Data.List (find, foldl')
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -12,7 +14,6 @@ import Data.Maybe (catMaybes, fromMaybe, isJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Debug.Trace
-import Text.Regex.TDFA ((=~))
 
 checkWaitcnts :: DisassembledKernel -> CFG -> [LogMessage]
 checkWaitcnts _ cfg@(CFG bbs) = Map.foldrWithKey' printMessage [] logMap
@@ -71,9 +72,9 @@ analyzeCfg (CFG bbs) ctx bbIdx = foldr analyzeSuccessor ctx {ctxLog = Map.union 
     analyzeInstructions [] (bbEvents, log) = (bbEvents, log)
     analyzeInstructions ((pc, i) : next) (bbEvents, log) =
       case i of
-        Instruction "s_waitcnt" [OConst 0] ->
+        Instruction ["s", "waitcnt"] [OConst 0] ->
           analyzeInstructions next (Map.empty, log)
-        Instruction "s_waitcnt" expr ->
+        Instruction ["s", "waitcnt"] expr ->
           analyzeInstructions next (updateEventsOnWaitcnt expr bbEvents, log)
         Instruction _ _ ->
           --trace ("dst: " ++ show dstGprs ++ ", srcs: " ++ show srcGprs ++ ", events: " ++ show bbEvents') $
@@ -137,7 +138,7 @@ incExistingEvents pc events = Map.map $ Map.map $ Map.mapWithKey (\ty c -> if ty
 
 extractDstSrcGprs :: Instruction -> ([Gpr], [Gpr])
 extractDstSrcGprs i = case i of
-  Instruction opcode operands | opcode =~ "^buffer_store" -> ([], extractGprs operands)
+  Instruction ("buffer" : "store" : _) operands -> ([], extractGprs operands)
   Instruction _ (dst : srcs) -> (extractGprs [dst], extractGprs srcs)
   _ -> ([], [])
   where
@@ -147,13 +148,14 @@ extractDstSrcGprs i = case i of
     extractGpr _ gprs = gprs
 
 extractGprEvents :: Instruction -> Maybe ([Gpr], [MemEvent])
-extractGprEvents (Instruction opcode (Ovgpr vdst : _))
-  | opcode =~ "^buffer_(load|atomic)" = Just (Vgpr <$> vdst, [EventVMem])
-  | opcode =~ "^buffer_store" = Just ([], [EventVMem])
-  | opcode =~ "^ds_read" = Just (Vgpr <$> vdst, [EventLDS])
-  | opcode =~ "^ds_write" = Just ([], [EventLDS])
-  | otherwise = Nothing
-extractGprEvents (Instruction opcode (Osgpr sdst : _))
-  | opcode =~ "^s_(buffer_)?load" = Just (Sgpr <$> sdst, [EventSLoad])
-  | otherwise = Nothing
-extractGprEvents _ = Nothing
+extractGprEvents i = case i of
+  Instruction ("buffer" : "load" : _) (Ovgpr vdst : _) -> Just (Vgpr <$> vdst, [EventVMem])
+  Instruction ("buffer" : "atomic" : _) (Ovgpr vdst : _) -> Just (Vgpr <$> vdst, [EventVMem])
+  Instruction ("buffer" : "store" : _) _ -> Just ([], [EventVMem])
+  Instruction ("ds" : dsOp : _) (Ovgpr vdst : _)
+    | "read" `BC8.isPrefixOf` dsOp -> Just (Vgpr <$> vdst, [EventLDS])
+  Instruction ("ds" : dsOp : _) _
+    | "write" `BC8.isPrefixOf` dsOp -> Just ([], [EventLDS])
+  Instruction ("s" : "buffer" : "load" : _) (Osgpr sdst : _) -> Just (Sgpr <$> sdst, [EventSLoad])
+  Instruction ("s" : "load" : _) (Osgpr sdst : _) -> Just (Sgpr <$> sdst, [EventSLoad])
+  _ -> Nothing
