@@ -16,7 +16,7 @@ import System.Console.CmdArgs
 data Opts = Opts
   { optCpu, optTriple :: String,
     optCo :: FilePath,
-    optDumpCfg :: Bool
+    optDisasm :: Bool
   }
   deriving (Data, Typeable, Show)
 
@@ -25,7 +25,7 @@ opts =
   Opts
     { optCpu = "gfx900" &= explicit &= name "mcpu" &= typ "gfx900" &= help "Target CPU type for disassembly (run `llc -march=amdgcn -mcpu=help` for a list of available CPUs)",
       optTriple = "amdgcn--amdhsa" &= explicit &= name "triple" &= typ "amdgcn--amdhsa" &= help "Target triple for disassembly",
-      optDumpCfg = def &= explicit &= name "dump-cfg" &= help "Print reconstructed CFG and exit",
+      optDisasm = def &= explicit &= name "disasm" &= help "Print disassembled shader code and exit",
       optCo = def &= argPos 0 &= typFile
     }
     &= program "coshan"
@@ -45,8 +45,8 @@ main = do
   let cfg = buildCfg instructions
 
   case args of
-    Opts {optDumpCfg = True} -> do
-      printCfg cfg
+    Opts {optDisasm = True} -> do
+      printCfg kernel cfg
     _ -> do
       report "waitcnt" (checkWaitcnts kernel cfg)
       report "s_nop" (checkRwLaneHazards kernel cfg)

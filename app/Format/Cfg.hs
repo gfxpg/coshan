@@ -4,41 +4,64 @@ module Format.Cfg where
 
 import Coshan.ControlFlow
 import Coshan.Disassembler
+import qualified Data.ByteString as BStr
 import qualified Data.ByteString.Builder as B
+import qualified Data.ByteString.Lazy as L
 import Data.List (intersperse)
+import Data.Semigroup (stimes)
 import System.IO (stdout)
 
-printCfg :: CFG -> IO ()
-printCfg = B.hPutBuilder stdout . formatCfg
+printCfg :: DisassembledKernel -> CFG -> IO ()
+printCfg kernel = B.hPutBuilder stdout . formatCfg kernel
 
-formatCfg :: CFG -> B.Builder
-formatCfg (CFG bbs) = mconcat $ putBb <$> zip [0 ..] bbs
+formatCfg :: DisassembledKernel -> CFG -> B.Builder
+formatCfg kernel (CFG bbs) = mconcat $ putBb <$> zip [0 ..] bbs
   where
     putBb (bbIdx, BasicBlock {bbInstructions = insts, bbPredecessors = predIdxs, bbSuccessors = succIdxs}) =
       putBbLabel bbIdx
-        <> str ":\t /* predecessors: "
-        <> strJoin (str ", ") (putBbLabel <$> predIdxs)
-        <> str ", successors: "
-        <> strJoin (str ", ") (putBbLabel <$> succIdxs)
-        <> str " */\n"
-        <> strJoin (ch '\n') (putInstruction <$> insts)
+        <> ":\t /* predecessors: "
+        <> strJoin ", " (putBbLabel <$> predIdxs)
+        <> ", successors: "
+        <> strJoin ", " (putBbLabel <$> succIdxs)
+        <> " */\n"
+        <> putInstructions insts ""
         <> ch '\n'
-    putBbLabel i = "bb" <> B.intDec i
-    putInstruction (pc, Instruction op ops) = putPc <> opcode <> ch ' ' <> operands
       where
-        opcode = mconcat $ intersperse (ch '_') $ B.byteString <$> op
-        operands = mconcat $ intersperse (str ", ") $ putOperand <$> ops
-        putPc = str "/* PC = " <> B.intDec pc <> str "\t*/ "
+        putBbLabel i = "bb" <> B.intDec i
+        putInstructions ((pc, i) : rest@((nextPc, _) : _)) acc =
+          putInstructions rest $ acc <> putInstruction pc i (nextPc - pc) <> "\n"
+        putInstructions [(pc, i)] acc
+          | bbIdx < length bbs - 1,
+            ((nextPc, _) : _) <- bbInstructions (bbs !! (bbIdx + 1)) =
+            acc <> putInstruction pc i (nextPc - pc) <> "\n"
+          | otherwise =
+            acc <> putInstruction pc i (BStr.length (disasmInstructionsBin kernel) - pc)
+        putInstructions [] acc = acc
+    putInstruction pc (Instruction op ops) size = B.lazyByteString asmInstruction <> putMeta
+      where
+        asmInstruction = B.toLazyByteString (opcode <> ch ' ' <> operands)
+          where
+            opcode = strJoin (ch '_') $ B.byteString <$> op
+            operands = strJoin ", " $ putOperand <$> ops
+        putMeta = stimes spacesAfterAsm (ch ' ') <> " // " <> B.int64HexFixed (fromIntegral pc) <> ":" <> binDwords binInstruction ""
+          where
+            binInstruction = BStr.take size . BStr.drop pc $ disasmInstructionsBin kernel
+            spacesAfterAsm = max 1 (100 - L.length asmInstruction)
+            binDwords inst acc
+              | BStr.null inst = acc
+              | otherwise =
+                let (dword, rest) = BStr.splitAt 4 inst
+                 in binDwords rest $ acc <> " " <> B.byteStringHex (BStr.reverse dword)
         putOperand o = case o of
           Osgpr rs -> ch 's' <> putRegs rs
           Ovgpr rs -> ch 'v' <> putRegs rs
-          Ottmp rs -> str "ttmp" <> putRegs rs
-          Ovmcnt ctr -> str "vmcnt(" <> B.intDec ctr <> ch ')'
-          Olgkmcnt ctr -> str "lgkmcnt(" <> B.intDec ctr <> ch ')'
-          Oexpcnt ctr -> str "expcnt(" <> B.intDec ctr <> ch ')'
+          Ottmp rs -> "ttmp" <> putRegs rs
+          Ovmcnt ctr -> "vmcnt(" <> B.intDec ctr <> ch ')'
+          Olgkmcnt ctr -> "lgkmcnt(" <> B.intDec ctr <> ch ')'
+          Oexpcnt ctr -> "expcnt(" <> B.intDec ctr <> ch ')'
           OConst int -> B.intDec int
           OConstF f -> B.floatDec f
-          OCtrl ctrl -> str ctrl
+          OCtrl ctrl -> B.byteString ctrl
         putRegs [i] = B.intDec i
         putRegs is
           | from <- head is,
@@ -48,5 +71,4 @@ formatCfg (CFG bbs) = mconcat $ putBb <$> zip [0 ..] bbs
             ch '[' <> B.intDec from <> ch ':' <> B.intDec to <> ch ']'
           | otherwise = error $ "Cannot print register range " ++ show is
     strJoin sep = mconcat . intersperse sep
-    str = B.byteString
     ch = B.char8
