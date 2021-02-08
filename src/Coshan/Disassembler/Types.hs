@@ -17,9 +17,12 @@ data Operand
   | OCtrl ByteString
   deriving (Eq, Show, Read)
 
+data KernelDescriptor = KernelDescriptorV2 !ByteString | KernelDescriptorV3 !ByteString
+  deriving (Show)
+
 data DisassembledKernel = DisassembledKernel
   { disasmKernelName :: !ByteString,
-    disasmKernelCodeT :: !ByteString,
+    disasmKernelCodeT :: !KernelDescriptor,
     disasmInstructionsBin :: !ByteString,
     disasmInstructions :: ![(PC, ByteString)]
   }

@@ -5,15 +5,13 @@ module ControlFlow.GeneralSpec where
 
 import Coshan.ControlFlow
 import Coshan.Disassembler
-import Data.ByteString (ByteString)
 import Data.String.Interpolate (i)
-import Data.Tuple.Strict (mapSnd)
 import Helpers
 import Test.Hspec
 
-simpleLoopKernel :: IO ByteString
+simpleLoopKernel :: IO (CFG, DisassembledKernel)
 simpleLoopKernel =
-  compileAsmKernel DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"} "cfg_simple_loop" $
+  loadFirstKernel . gfx900Kernel "cfg_simple_loop" $
     [i|
 s_load_dwordx2 s[0:1], s[4:5], 0x0
 s_waitcnt lgkmcnt(0)
@@ -45,9 +43,8 @@ bb84:
 spec :: Spec
 spec = describe "cfg construction" $ do
   it "handles primitive loops" $ do
-    kernel <- head <$> (simpleLoopKernel >>= readElf (DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"}))
-    let instructions = mapSnd parseInstruction <$> disasmInstructions kernel
-    buildCfg instructions
+    (cfg, _) <- simpleLoopKernel
+    cfg
       `shouldBe` CFG
         [ BasicBlock
             { bbInstructions =

@@ -13,8 +13,7 @@ spec :: Spec
 spec = describe "memory requests dependency resolution using s_waitcnt" $ do
   it "checks vector memory reads with buffer instructions" $ do
     (cfg, kernel) <-
-      loadGfx900Kernel
-        [i|waitcnt_buffer_load|]
+      loadFirstKernel . gfx900Kernel "waitcnt_buffer_load" $
         [i|
           buffer_load_dwordx4 v[0:3], off, s[0:3], 0           // PC = 0
           buffer_load_dwordx4 v[4:7], off, s[0:3], 0 offset:16 // PC = 8
@@ -27,8 +26,7 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
 
   it "checks scalar memory read instructions" $ do
     (cfg, kernel) <-
-      loadGfx900Kernel
-        [i|waitcnt_scalar_load|]
+      loadFirstKernel . gfx900Kernel "waitcnt_scalar_load" $
         [i|
           s_load_dword s0, s[4:5], 0
           s_load_dwordx4 s[8:11], s[4:5], 4           // PC = 8
@@ -51,8 +49,7 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
 
   it "recognizes s_waitcnt vmcnt(N) lgkmcnt(N)" $ do
     (cfg, kernel) <-
-      loadGfx900Kernel
-        [i|waitcnt_buffer_load|]
+      loadFirstKernel . gfx900Kernel "waitcnt_buffer_load" $
         [i|
           buffer_load_dwordx4 v[0:3], off, s[0:3], 0           // PC = 0
           buffer_load_dwordx4 v[4:7], off, s[0:3], 0 offset:16 // PC = 8
@@ -70,8 +67,7 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
 
   it "recognizes s_waitcnt 0" $ do
     (cfg, kernel) <-
-      loadGfx900Kernel
-        [i|waitcnt_buffer_load|]
+      loadFirstKernel . gfx900Kernel "waitcnt_buffer_load" $
         [i|
           buffer_load_dwordx4 v[0:3], off, s[0:3], 0           // PC = 0
           buffer_load_dwordx4 v[4:7], off, s[0:3], 0 offset:16 // PC = 8
@@ -84,8 +80,7 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
 
   it "recognizes dependencies in loops" $ do
     (cfg, kernel) <-
-      loadGfx900Kernel
-        [i|waitcnt_loop|]
+      loadFirstKernel . gfx900Kernel "waitcnt_loop" $
         [i|
           buffer_load_dword v0, off, s[0:3], 0 // PC = 0
           s_nop 0

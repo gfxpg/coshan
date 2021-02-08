@@ -12,7 +12,7 @@ spec :: Spec
 spec = describe "parseInstruction" $ do
   it "extracts registers" $ do
     elf <-
-      compileAsmKernel DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"} "disasm_regs" $
+      compileCo . gfx900Kernel "disasm_regs" $
         [i|
           s_load_dword s3, s[0:1], 0x00
           global_store_dword v[1:2], v3, off
@@ -27,7 +27,7 @@ spec = describe "parseInstruction" $ do
 
   it "extracts integer literals" $ do
     elf <-
-      compileAsmKernel DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"} "disasm_int_lits" $
+      compileCo . gfx900Kernel "disasm_int_lits" $
         [i|
           v_mov_b32_e32 v0, 0x41100000
           s_cbranch_scc1 65522
@@ -42,7 +42,7 @@ spec = describe "parseInstruction" $ do
 
   it "extracts float literals" $ do
     elf <-
-      compileAsmKernel DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"} "disasm_float_lits" $
+      compileCo . gfx900Kernel "disasm_float_lits" $
         [i|
           v_add_f32_e32 v0, 1.0, v0
           v_add_f32_e32 v0, -1.0, v0
@@ -61,7 +61,7 @@ spec = describe "parseInstruction" $ do
 
   it "extracts control operands" $ do
     elf <-
-      compileAsmKernel DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"} "disasm_ctrl" $
+      compileCo . gfx900Kernel "disasm_ctrl" $
         [i|
           ds_read2_b32 v[1:2], v0 offset0:0 offset1:4
           v_cmp_eq_u32_e32 vcc, 3, v2
@@ -76,7 +76,7 @@ spec = describe "parseInstruction" $ do
 
   it "extracts s_waitcnt operands" $ do
     elf <-
-      compileAsmKernel DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"} "disasm_waitcnt" $
+      compileCo . gfx900Kernel "disasm_waitcnt" $
         [i|
           s_waitcnt 0
           s_waitcnt lgkmcnt(7)
@@ -91,7 +91,7 @@ spec = describe "parseInstruction" $ do
 
   it "handles instructions with no operands" $ do
     elf <-
-      compileAsmKernel DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"} "disasm_zero_op" $
+      compileCo . gfx900Kernel "disasm_zero_op" $
         [i|
           s_endpgm
           v_nop

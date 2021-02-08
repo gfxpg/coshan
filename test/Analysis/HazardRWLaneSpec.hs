@@ -14,8 +14,7 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
   it "recognizes s_nop with insufficient wait states" $
     forM_ ["v_readlane_b32", "v_writelane_b32"] $ \instruction -> do
       (cfg, kernel) <-
-        loadGfx900Kernel
-          [i|rwlane_s_nop_#{instruction}|]
+        loadFirstKernel . gfx900Kernel [i|rwlane_s_nop_#{instruction}|] $
           [i|
           v_add_co_u32 v1, s[2:3], v0, v1 // PC = 0: s[2:3] <- carry bits
           s_nop 2                         // PC = 8: 3 wait states
@@ -34,8 +33,7 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
   it "follows conditional branches" $
     forM_ ["v_readlane_b32", "v_writelane_b32"] $ \instruction -> do
       (cfg, kernel) <-
-        loadGfx900Kernel
-          [i|rwlane_cond_br_#{instruction}|]
+        loadFirstKernel . gfx900Kernel [i|rwlane_cond_br_#{instruction}|] $
           [i|
           v_add_co_u32 v1, s[2:3], v0, v1 // PC = 0: s[2:3] <- carry bits
           s_nop 0                         // PC = 8: 1 wait state
@@ -59,8 +57,7 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
   it "handles loops with hazards" $
     forM_ ["v_readlane_b32", "v_writelane_b32"] $ \instruction -> do
       (cfg, kernel) <-
-        loadGfx900Kernel
-          [i|rwlane_loop_#{instruction}|]
+        loadFirstKernel . gfx900Kernel [i|rwlane_loop_#{instruction}|] $
           [i|
           prelude:
           s_mov_b32 s3, 0                 // PC = 0
@@ -86,8 +83,7 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
   it "handles loops without hazards" $
     forM_ ["v_readlane_b32", "v_writelane_b32"] $ \instruction -> do
       (cfg, kernel) <-
-        loadGfx900Kernel
-          [i|rwlane_loop_none_#{instruction}|]
+        loadFirstKernel . gfx900Kernel [i|rwlane_loop_none_#{instruction}|] $
           [i|
           prelude:
           s_mov_b32 s3, 0

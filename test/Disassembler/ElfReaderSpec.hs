@@ -1,19 +1,32 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
-module Disassembler.GeneralSpec where
+module Disassembler.ElfReaderSpec where
 
 import Coshan.Disassembler
 import qualified Data.ByteString as BStr
+import Helpers
 import Test.Hspec
 
 spec :: Spec
-spec = describe "disassembler" $ do
-  it "extracts assembly code for all kernels in an ELF binary" $ do
+spec = describe "elf reader" $ do
+  it "extracts all kernels from code object V3" $ do
+    elf <-
+      compileCo $ CodeObject {coCpu = "gfx900", coMetadataV3 = True, coKernels = [("test_kernel_a", "v_nop\ns_endpgm"), ("test_kernel_b", "s_endpgm")]}
+    kernels <- readElf (DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"}) elf
+    length kernels `shouldBe` 2
+    disasmKernelName (head kernels) `shouldBe` "test_kernel_a"
+    disasmKernelName (kernels !! 1) `shouldBe` "test_kernel_b"
+    let paddingInstructions = (,"s_nop 0") <$> [8, 12 .. 252] -- kernels are aligned on a 256-byte boundary (?)
+    disasmInstructions (head kernels) `shouldBe` [(0, "v_nop"), (4, "s_endpgm")] ++ paddingInstructions
+    disasmInstructions (kernels !! 1) `shouldBe` [(0, "s_endpgm")]
+
+  it "extracts all kernels from code object V2" $ do
     elf <- BStr.readFile "test/Disassembler/Cases/kernels.hsaco"
     kernels <- readElf (DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"}) elf
     length kernels `shouldBe` 2
-    disasmKernelName (kernels !! 0) `shouldBe` "_Z10cond_writePfPKff"
-    disasmInstructions (kernels !! 0)
+    disasmKernelName (head kernels) `shouldBe` "_Z10cond_writePfPKff"
+    disasmInstructions (head kernels)
       `shouldBe` [ (0, "s_load_dwordx4 s[0:3], s[4:5], 0x0"),
                    (8, "s_load_dword s4, s[4:5], 0x10"),
                    (16, "s_waitcnt lgkmcnt(0)"),
