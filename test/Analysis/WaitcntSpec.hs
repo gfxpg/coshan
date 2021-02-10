@@ -22,7 +22,13 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
           v_add_f32 v1, v1, 1.0                                // PC = 28, shouldn't produce an error because v1 is overwritten
         |]
     checkWaitcnts kernel cfg
-      `shouldBe` [LogMessage 16 [LogText "Missing", LogInstruction "s_waitcnt vmcnt(1)", LogText "before accessing register", LogOperand (Ovgpr [2]), LogText "read from memory at", LogInstructionPath [0]]]
+      `shouldBe` [ LogMessage 16 $
+                     InstructionRequired
+                       { instreqInstruction = Instruction ["s", "waitcnt"] [Ovmcnt 1],
+                         instreqBacktrace = [0],
+                         instreqExplanation = "Register v2 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                       }
+                 ]
 
   it "checks scalar memory read instructions" $ do
     (cfg, kernel) <-
@@ -40,11 +46,36 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
           buffer_store_dword v3, off, s[8:11], 0 offset:8  // PC = 68
         |]
     checkWaitcnts kernel cfg
-      `shouldBe` [ LogMessage 24 [LogText "Missing", LogInstruction "s_waitcnt lgkmcnt(0)", LogText "before accessing register", LogOperand (Osgpr [0]), LogText "read from memory at", LogInstructionPath [0]],
-                   LogMessage 52 [LogText "Missing", LogInstruction "s_waitcnt lgkmcnt(0)", LogText "before accessing register", LogOperand (Osgpr [11]), LogText "read from memory at", LogInstructionPath [8]],
-                   LogMessage 52 [LogText "Missing", LogInstruction "s_waitcnt lgkmcnt(0)", LogText "before accessing register", LogOperand (Ovgpr [1]), LogText "read from memory at", LogInstructionPath [32]],
-                   LogMessage 60 [LogText "Missing", LogInstruction "s_waitcnt lgkmcnt(1)", LogText "before accessing register", LogOperand (Ovgpr [2]), LogText "read from memory at", LogInstructionPath [32]],
-                   LogMessage 68 [LogText "Missing", LogInstruction "s_waitcnt lgkmcnt(0)", LogText "before accessing register", LogOperand (Ovgpr [3]), LogText "read from memory at", LogInstructionPath [44]]
+      `shouldBe` [ LogMessage 24 $
+                     InstructionRequired
+                       { instreqInstruction = Instruction ["s", "waitcnt"] [Olgkmcnt 0],
+                         instreqBacktrace = [0],
+                         instreqExplanation = "Register s0 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                       },
+                   LogMessage 52 $
+                     InstructionRequired
+                       { instreqInstruction = Instruction ["s", "waitcnt"] [Olgkmcnt 0],
+                         instreqBacktrace = [8],
+                         instreqExplanation = "Register s11 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                       },
+                   LogMessage 52 $
+                     InstructionRequired
+                       { instreqInstruction = Instruction ["s", "waitcnt"] [Olgkmcnt 0],
+                         instreqBacktrace = [32],
+                         instreqExplanation = "Register v1 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                       },
+                   LogMessage 60 $
+                     InstructionRequired
+                       { instreqInstruction = Instruction ["s", "waitcnt"] [Olgkmcnt 1],
+                         instreqBacktrace = [32],
+                         instreqExplanation = "Register v2 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                       },
+                   LogMessage 68 $
+                     InstructionRequired
+                       { instreqInstruction = Instruction ["s", "waitcnt"] [Olgkmcnt 0],
+                         instreqBacktrace = [44],
+                         instreqExplanation = "Register v3 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                       }
                  ]
 
   it "recognizes s_waitcnt vmcnt(N) lgkmcnt(N)" $ do
@@ -61,8 +92,18 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
           v_add_f32 v0, v0, v4                                 // PC = 48
         |]
     checkWaitcnts kernel cfg
-      `shouldBe` [ LogMessage 28 [LogText "Missing", LogInstruction "s_waitcnt vmcnt(0)", LogText "before accessing register", LogOperand (Ovgpr [4]), LogText "read from memory at", LogInstructionPath [8]],
-                   LogMessage 48 [LogText "Missing", LogInstruction "s_waitcnt lgkmcnt(0)", LogText "before accessing register", LogOperand (Ovgpr [4]), LogText "read from memory at", LogInstructionPath [28]]
+      `shouldBe` [ LogMessage 28 $
+                     InstructionRequired
+                       { instreqInstruction = Instruction ["s", "waitcnt"] [Ovmcnt 0],
+                         instreqBacktrace = [8],
+                         instreqExplanation = "Register v4 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                       },
+                   LogMessage 48 $
+                     InstructionRequired
+                       { instreqInstruction = Instruction ["s", "waitcnt"] [Olgkmcnt 0],
+                         instreqBacktrace = [28],
+                         instreqExplanation = "Register v4 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                       }
                  ]
 
   it "recognizes s_waitcnt 0" $ do
@@ -106,7 +147,22 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
             s_branch bb48                      // PC = 84
       |]
     checkWaitcnts kernel cfg
-      `shouldBe` [ LogMessage 16 [LogText "Missing", LogInstruction "s_waitcnt vmcnt(0)", LogText "before accessing register", LogOperand (Ovgpr [0]), LogText "read from memory at", LogInstructionPath [0]],
-                   LogMessage 16 [LogText "Missing", LogInstruction "s_waitcnt vmcnt(1)", LogText "before accessing register", LogOperand (Ovgpr [0]), LogText "read from memory at", LogInstructionPath [32]],
-                   LogMessage 56 [LogText "Missing", LogInstruction "s_waitcnt vmcnt(1)", LogText "before accessing register", LogOperand (Ovgpr [1]), LogText "read from memory at", LogInstructionPath [32]]
+      `shouldBe` [ LogMessage 16 $
+                     InstructionRequired
+                       { instreqInstruction = Instruction ["s", "waitcnt"] [Ovmcnt 0],
+                         instreqBacktrace = [0],
+                         instreqExplanation = "Register v0 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                       },
+                   LogMessage 16 $
+                     InstructionRequired
+                       { instreqInstruction = Instruction ["s", "waitcnt"] [Ovmcnt 1],
+                         instreqBacktrace = [32],
+                         instreqExplanation = "Register v0 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                       },
+                   LogMessage 56 $
+                     InstructionRequired
+                       { instreqInstruction = Instruction ["s", "waitcnt"] [Ovmcnt 1],
+                         instreqBacktrace = [32],
+                         instreqExplanation = "Register v1 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                       }
                  ]

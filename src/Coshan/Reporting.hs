@@ -1,13 +1,13 @@
-module Coshan.Reporting (LogMessage (..), LogSpan (..)) where
+module Coshan.Reporting where
 
-import Coshan.Disassembler (Operand, PC)
+import Coshan.Disassembler (Instruction, PC)
 
-data LogMessage = LogMessage PC [LogSpan]
+data LogMessage = LogMessage PC Error
   deriving (Eq, Show)
 
-data LogSpan
-  = LogText String
-  | LogInstruction String
-  | LogOperand Operand
-  | LogInstructionPath [PC]
+data Error = InstructionRequired
+  { instreqInstruction :: Instruction,
+    instreqBacktrace :: [PC],
+    instreqExplanation :: String
+  }
   deriving (Eq, Show)

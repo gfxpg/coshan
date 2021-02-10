@@ -2,11 +2,10 @@ module Coshan.Analysis.HazardRWLane (checkRwLaneHazards) where
 
 import Coshan.ControlFlow
 import Coshan.Disassembler
-import Coshan.Reporting
-import qualified Data.ByteString.Char8 as BC8
+import qualified Coshan.Reporting as R
 import Data.Foldable (msum)
 
-checkRwLaneHazards :: DisassembledKernel -> CFG -> [LogMessage]
+checkRwLaneHazards :: DisassembledKernel -> CFG -> [R.LogMessage]
 checkRwLaneHazards _ (CFG bbs) = go [] bbs
   where
     go log [] = log
@@ -19,22 +18,23 @@ data WaitStatesIterCtx = WaitStatesIterCtx
     walkedBbIdxs :: [BasicBlockIdx] -- indexes of all basic blocks we visited (to avoid processing the same blocks in loops)
   }
 
-analyzeBb :: CFG -> BasicBlock -> [LogMessage]
+analyzeBb :: CFG -> BasicBlock -> [R.LogMessage]
 analyzeBb (CFG bbs) currBb = analyzeInstructions ([], bbInstructions currBb) []
   where
     analyzeInstructions (_, []) log = log
     analyzeInstructions (prev, (pc, i) : next) log =
       case i of
-        Instruction opcode@("v" : vop : _) [_dst, _src, Osgpr [selector]]
+        Instruction ("v" : vop : _) [_dst, _src, Osgpr [selector]]
           | vop == "readlane" || vop == "writelane",
             iterCtx <- WaitStatesIterCtx {reverseBbInsts = prev, predBbIdxs = bbPredecessors currBb, walkedInsts = [], walkedBbIdxs = []},
             Just (missingStates, path) <- missingWaitStatesPath 4 selector iterCtx ->
-            let missingStatesText = if missingStates == 1 then "1 wait state" else show missingStates ++ " wait states"
-                text =
-                  [ LogText ("Missing " ++ missingStatesText ++ " for " ++ BC8.unpack (BC8.intercalate "_" opcode) ++ " with an SGPR lane selector modified by a VALU instruction:"),
-                    LogInstructionPath (fst <$> path)
-                  ]
-             in analyzeInstructions ((pc, i) : prev, next) (LogMessage pc text : log)
+            let error =
+                  R.InstructionRequired
+                    { R.instreqInstruction = Instruction ["s", "nop"] [OConst $ missingStates - 1],
+                      R.instreqBacktrace = fst <$> path,
+                      R.instreqExplanation = "A v_readlane/v_writelane instruction with an SGPR lane selector requires 4 wait states after the selector has been modified by a VALU instruction."
+                    }
+             in analyzeInstructions ((pc, i) : prev, next) (R.LogMessage pc error : log)
         _ -> analyzeInstructions ((pc, i) : prev, next) log
     missingWaitStatesPath :: Int -> Int -> WaitStatesIterCtx -> Maybe (Int, [(PC, Instruction)]) -- path to the instruction with missing wait states
     missingWaitStatesPath s _ _ | s <= 0 = Nothing

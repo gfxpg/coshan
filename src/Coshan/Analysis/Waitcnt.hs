@@ -2,35 +2,33 @@ module Coshan.Analysis.Waitcnt (checkWaitcnts) where
 
 import Coshan.ControlFlow
 import Coshan.Disassembler
-import Coshan.Reporting
+import qualified Coshan.Reporting as R
 import qualified Data.ByteString.Char8 as BC8
 import Data.List (find, foldl')
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
-import Debug.Trace
 
-checkWaitcnts :: DisassembledKernel -> CFG -> [LogMessage]
+checkWaitcnts :: DisassembledKernel -> CFG -> [R.LogMessage]
 checkWaitcnts _ cfg = Map.foldrWithKey' printMessage [] logMap
   where
     emptyCtx = IterCtx {ctxInEvents = Map.singleton 0 Map.empty, ctxLog = Map.empty}
     logMap = ctxLog $ analyzeCfg cfg emptyCtx 0
     printMessage loc ctrs log =
-      LogMessage
-        (locGprUsedAt loc)
-        [ LogText "Missing",
-          LogInstruction ("s_waitcnt " ++ waitcntOps ctrs),
-          LogText "before accessing register",
-          LogOperand (locOperand loc),
-          LogText "read from memory at",
-          LogInstructionPath [locOpIssuedAt loc]
-        ] :
-      log
+      let error =
+            R.InstructionRequired
+              { R.instreqInstruction = Instruction ["s", "waitcnt"] (op <$> Map.toList ctrs),
+                R.instreqBacktrace = [locOpIssuedAt loc],
+                R.instreqExplanation = "Register " ++ reg (locOperand loc) ++ " is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+              }
+       in R.LogMessage (locGprUsedAt loc) error : log
       where
-        waitcntOps ctrs = unwords (showCtr <$> Map.toList ctrs)
-        showCtr (WaitVmcnt, c) = "vmcnt(" ++ show c ++ ")"
-        showCtr (WaitLgkmcnt, c) = "lgkmcnt(" ++ show c ++ ")"
+        reg (Ovgpr [r]) = "v" ++ show r
+        reg (Osgpr [r]) = "s" ++ show r
+        reg _ = ""
+        op (WaitVmcnt, c) = Ovmcnt c
+        op (WaitLgkmcnt, c) = Olgkmcnt c
 
 data Gpr = Sgpr Int | Vgpr Int
   deriving (Eq, Ord, Show)
