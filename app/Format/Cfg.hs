@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Format.Cfg where
 
 import Coshan.ControlFlow

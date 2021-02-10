@@ -16,6 +16,10 @@ ghc-options:
 - -Wall
 - -Wno-name-shadowing
 
+default-extensions:
+- OverloadedStrings
+- TupleSections
+
 library:
   source-dirs: src
   cc-options: -fPIC

@@ -1,6 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
-
 module Coshan.Analysis.Waitcnt (checkWaitcnts) where
 
 import Coshan.ControlFlow

@@ -1,6 +1,4 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
 {-# OPTIONS_GHC -fno-cse #-}
 
 module Main where

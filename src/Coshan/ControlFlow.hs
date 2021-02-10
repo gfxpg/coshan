@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Coshan.ControlFlow (buildCfg, CFG (..), BasicBlock (..), BasicBlockIdx) where
 
 import Coshan.Disassembler (Instruction (..), Operand (..), PC)

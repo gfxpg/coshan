@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Coshan.Disassembler.ElfReader (readElf) where
 
 import Control.Monad (forM)

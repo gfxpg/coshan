@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Coshan.Analysis.HazardRWLane (checkRwLaneHazards) where
 
 import Coshan.ControlFlow

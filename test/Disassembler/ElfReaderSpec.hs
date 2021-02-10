@@ -1,6 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
-
 module Disassembler.ElfReaderSpec where
 
 import Coshan.Disassembler
