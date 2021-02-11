@@ -20,7 +20,7 @@ checkWaitcnts _ cfg = Map.foldrWithKey' printMessage [] logMap
             R.InstructionRequired
               { R.instreqInstruction = Instruction ["s", "waitcnt"] (op <$> Map.toList ctrs),
                 R.instreqBacktrace = [locOpIssuedAt loc],
-                R.instreqExplanation = "Register " ++ reg (locOperand loc) ++ " is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                R.instreqExplanation = "Source register " ++ reg (locOperand loc) ++ " is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
               }
        in R.LogMessage (locGprUsedAt loc) error : log
       where

@@ -26,7 +26,7 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
                      InstructionRequired
                        { instreqInstruction = Instruction ["s", "waitcnt"] [Ovmcnt 1],
                          instreqBacktrace = [0],
-                         instreqExplanation = "Register v2 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                         instreqExplanation = "Source register v2 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
                        }
                  ]
 
@@ -50,31 +50,31 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
                      InstructionRequired
                        { instreqInstruction = Instruction ["s", "waitcnt"] [Olgkmcnt 0],
                          instreqBacktrace = [0],
-                         instreqExplanation = "Register s0 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                         instreqExplanation = "Source register s0 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
                        },
                    LogMessage 52 $
                      InstructionRequired
                        { instreqInstruction = Instruction ["s", "waitcnt"] [Olgkmcnt 0],
                          instreqBacktrace = [8],
-                         instreqExplanation = "Register s11 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                         instreqExplanation = "Source register s11 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
                        },
                    LogMessage 52 $
                      InstructionRequired
                        { instreqInstruction = Instruction ["s", "waitcnt"] [Olgkmcnt 0],
                          instreqBacktrace = [32],
-                         instreqExplanation = "Register v1 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                         instreqExplanation = "Source register v1 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
                        },
                    LogMessage 60 $
                      InstructionRequired
                        { instreqInstruction = Instruction ["s", "waitcnt"] [Olgkmcnt 1],
                          instreqBacktrace = [32],
-                         instreqExplanation = "Register v2 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                         instreqExplanation = "Source register v2 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
                        },
                    LogMessage 68 $
                      InstructionRequired
                        { instreqInstruction = Instruction ["s", "waitcnt"] [Olgkmcnt 0],
                          instreqBacktrace = [44],
-                         instreqExplanation = "Register v3 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                         instreqExplanation = "Source register v3 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
                        }
                  ]
 
@@ -96,13 +96,13 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
                      InstructionRequired
                        { instreqInstruction = Instruction ["s", "waitcnt"] [Ovmcnt 0],
                          instreqBacktrace = [8],
-                         instreqExplanation = "Register v4 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                         instreqExplanation = "Source register v4 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
                        },
                    LogMessage 48 $
                      InstructionRequired
                        { instreqInstruction = Instruction ["s", "waitcnt"] [Olgkmcnt 0],
                          instreqBacktrace = [28],
-                         instreqExplanation = "Register v4 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                         instreqExplanation = "Source register v4 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
                        }
                  ]
 
@@ -151,18 +151,18 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
                      InstructionRequired
                        { instreqInstruction = Instruction ["s", "waitcnt"] [Ovmcnt 0],
                          instreqBacktrace = [0],
-                         instreqExplanation = "Register v0 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                         instreqExplanation = "Source register v0 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
                        },
                    LogMessage 16 $
                      InstructionRequired
                        { instreqInstruction = Instruction ["s", "waitcnt"] [Ovmcnt 1],
                          instreqBacktrace = [32],
-                         instreqExplanation = "Register v0 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                         instreqExplanation = "Source register v0 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
                        },
                    LogMessage 56 $
                      InstructionRequired
                        { instreqInstruction = Instruction ["s", "waitcnt"] [Ovmcnt 1],
                          instreqBacktrace = [32],
-                         instreqExplanation = "Register v1 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+                         instreqExplanation = "Source register v1 is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
                        }
                  ]

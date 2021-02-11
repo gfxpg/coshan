@@ -11,6 +11,7 @@ import Coshan.Reporting
 import Data.Bifunctor (second)
 import qualified Data.ByteString as B
 import Format.Cfg (printCfg)
+import Format.Report (printAnalysisReport)
 import Numeric (readHex)
 import System.Console.CmdArgs
 
@@ -52,8 +53,10 @@ main = do
     Opts {optDisasm = True} -> do
       printCfg kernel cfg
     _ -> do
-      report "waitcnt" (checkWaitcnts kernel cfg)
-      report "s_nop" (checkRwLaneHazards kernel cfg)
+      printAnalysisReport kernel $
+        [ ("Manually Inserted Wait States (s_nop)", checkRwLaneHazards kernel cfg),
+          ("Data Dependency Resolution (s_waitcnt)", checkWaitcnts kernel cfg)
+        ]
 
 insertNops :: [Int] -> DisassembledKernel -> DisassembledKernel
 insertNops [] kernel = kernel
@@ -65,7 +68,3 @@ insertNops nops kernel = kernel {disasmInstructions = scanInstructions (disasmIn
         (nextPc, _) : _ -> ((,"s_nop 0") <$> [nextPc - 4, nextPc - 8 .. pc]) ++ acc
         _ -> (pc, "s_nop 0") : acc
       | otherwise = scanInstructions rest $ (pc, i) : acc
-
-report :: String -> [LogMessage] -> IO ()
-report analyzer [] = putStrLn (analyzer ++ ": OK")
-report analyzer log = putStrLn (analyzer ++ ":") >> print log

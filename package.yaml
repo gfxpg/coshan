@@ -36,6 +36,7 @@ executables:
     dependencies:
     - coshan
     - cmdargs
+    - ansi-wl-pprint
 
 tests:
   coshan-test:
