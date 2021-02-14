@@ -3,6 +3,7 @@
 module ControlFlow.GeneralSpec where
 
 import Coshan.ControlFlow
+import Coshan.ControlFlow.Types
 import Coshan.Disassembler
 import Data.String.Interpolate (i)
 import Helpers
@@ -50,8 +51,8 @@ spec = describe "cfg construction" $ do
                   (20, Instruction ["s", "waitcnt"] [Olgkmcnt 0]),
                   (24, Instruction ["v", "mov", "b32", "e32"] [Ovgpr [0], Osgpr [2]])
                 ],
-              bbPredecessors = [],
-              bbSuccessors = [1]
+              bbEntries = [],
+              bbExit = BbExitFallThrough 1
             },
           BasicBlock
             { bbInstructions =
@@ -60,8 +61,8 @@ spec = describe "cfg construction" $ do
                   (36, Instruction ["s", "and", "b64"] [OCtrl "vcc", OCtrl "exec", OCtrl "vcc"]),
                   (40, Instruction ["s", "cbranch", "vccnz"] [OConst 65532])
                 ],
-              bbPredecessors = [0, 1, 4],
-              bbSuccessors = [1, 2]
+              bbEntries = [0, 1, 4],
+              bbExit = BbExitCondJump 1 2
             },
           BasicBlock
             { bbInstructions =
@@ -69,8 +70,8 @@ spec = describe "cfg construction" $ do
                   (52, Instruction ["s", "waitcnt"] [Olgkmcnt 0]),
                   (56, Instruction ["v", "mov", "b32", "e32"] [Ovgpr [1], Osgpr [2]])
                 ],
-              bbPredecessors = [1],
-              bbSuccessors = [3]
+              bbEntries = [1],
+              bbExit = BbExitFallThrough 3
             },
           BasicBlock
             { bbInstructions =
@@ -80,8 +81,8 @@ spec = describe "cfg construction" $ do
                   (76, Instruction ["s", "and", "b64"] [OCtrl "vcc", OCtrl "exec", OCtrl "vcc"]),
                   (80, Instruction ["s", "cbranch", "vccnz"] [OConst 65530])
                 ],
-              bbPredecessors = [2, 3],
-              bbSuccessors = [3, 4]
+              bbEntries = [2, 3],
+              bbExit = BbExitCondJump 3 4
             },
           BasicBlock
             { bbInstructions =
@@ -90,8 +91,8 @@ spec = describe "cfg construction" $ do
                   (92, Instruction ["global", "store", "dword"] [Ovgpr [2, 3], Ovgpr [1], OCtrl "off", OCtrl "offset:4"]),
                   (100, Instruction ["s", "branch"] [OConst 65517])
                 ],
-              bbPredecessors = [3],
-              bbSuccessors = [1]
+              bbEntries = [3],
+              bbExit = BbExitJump 1
             }
         ]
   it "recognizes function calls that use s_call_b64" $ do
@@ -135,47 +136,47 @@ spec = describe "cfg construction" $ do
                 [ (0, Instruction ["s", "load", "dwordx2"] [Osgpr [0, 1], Osgpr [4, 5], OConst 0]),
                   (8, Instruction ["s", "call", "b64"] [Osgpr [10, 11], OConst 10])
                 ],
-              bbPredecessors = [1, 4],
-              bbSuccessors = [7]
+              bbEntries = [1, 4],
+              bbExit = BbExitJumpSavePc (SgprPair (10,11)) 7
             },
           BasicBlock -- 1
             { bbInstructions =
                 [ (12, Instruction ["v", "cmp", "lt", "f32", "e32"] [OCtrl "vcc", OConstF 1.0, Ovgpr [0]]),
                   (16, Instruction ["s", "cbranch", "vccnz"] [OConst 65531])
                 ],
-              bbPredecessors = [10],
-              bbSuccessors = [0, 2]
+              bbEntries = [10],
+              bbExit = BbExitCondJump 0 2
             },
           BasicBlock -- 2
             { bbInstructions =
                 [ (20, Instruction ["global", "store", "dword"] [Ovgpr [2, 3], Ovgpr [0], OCtrl "off", OCtrl "offset:4"]),
                   (28, Instruction ["s", "call", "b64"] [Osgpr [10, 11], OConst 5])
                 ],
-              bbPredecessors = [1],
-              bbSuccessors = [7]
+              bbEntries = [1],
+              bbExit = BbExitJumpSavePc (SgprPair (10,11)) 7
             },
           BasicBlock -- 3
             { bbInstructions = [(32, Instruction ["s", "call", "b64"] [Osgpr [0, 1], OConst 3])],
-              bbPredecessors = [10],
-              bbSuccessors = [6]
+              bbEntries = [10],
+              bbExit = BbExitJumpSavePc (SgprPair (0,1)) 6
             },
           BasicBlock -- 4
             { bbInstructions =
                 [ (36, Instruction ["s", "cmp", "eq", "u32"] [Osgpr [0], OConst 0]),
                   (40, Instruction ["s", "cbranch", "scc0"] [OConst 65525])
                 ],
-              bbPredecessors = [6],
-              bbSuccessors = [0, 5]
+              bbEntries = [6],
+              bbExit = BbExitCondJump 0 5
             },
           BasicBlock -- 5
             { bbInstructions = [(44, Instruction ["s", "branch"] [OConst 8])],
-              bbPredecessors = [4],
-              bbSuccessors = [11]
+              bbEntries = [4],
+              bbExit = BbExitJump 11
             },
           BasicBlock -- 6
             { bbInstructions = [(48, Instruction ["s", "setpc", "b64"] [Osgpr [0, 1]])],
-              bbPredecessors = [3, 8],
-              bbSuccessors = [4, 9]
+              bbEntries = [3, 8],
+              bbExit = BbExitDynamic (SgprPair (0,1))
             },
           BasicBlock -- 7
             { bbInstructions =
@@ -183,30 +184,30 @@ spec = describe "cfg construction" $ do
                   (56, Instruction ["s", "cmp", "eq", "u32"] [Osgpr [1], OConst 0]),
                   (60, Instruction ["s", "cbranch", "scc1"] [OConst 3])
                 ],
-              bbPredecessors = [0, 2],
-              bbSuccessors = [8, 10]
+              bbEntries = [0, 2],
+              bbExit = BbExitCondJump 10 8
             },
           BasicBlock -- 8
             { bbInstructions = [(64, Instruction ["s", "call", "b64"] [Osgpr [0, 1], OConst 65531])],
-              bbPredecessors = [7],
-              bbSuccessors = [6]
+              bbEntries = [7],
+              bbExit = BbExitJumpSavePc (SgprPair (0,1)) 6
             },
           BasicBlock -- 9
             { bbInstructions =
                 [ (68, Instruction ["v", "mov", "b32", "e32"] [Ovgpr [0], Osgpr [1]]),
                   (72, Instruction ["v", "add", "f32", "e32"] [Ovgpr [0], OConstF 1.0, Ovgpr [0]])
                 ],
-              bbPredecessors = [6],
-              bbSuccessors = [10]
+              bbEntries = [6],
+              bbExit = BbExitFallThrough 10
             },
           BasicBlock -- 10
             { bbInstructions = [(76, Instruction ["s", "setpc", "b64"] [Osgpr [10, 11]])],
-              bbPredecessors = [7, 9],
-              bbSuccessors = [1, 3]
+              bbEntries = [7, 9],
+              bbExit = BbExitDynamic (SgprPair (10,11))
             },
           BasicBlock -- 11
             { bbInstructions = [(80, Instruction ["s", "endpgm"] [])],
-              bbPredecessors = [5],
-              bbSuccessors = []
+              bbEntries = [5],
+              bbExit = BbExitTerminal
             }
         ]
