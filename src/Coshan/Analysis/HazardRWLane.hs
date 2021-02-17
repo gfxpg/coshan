@@ -26,7 +26,7 @@ analyzeBb (CFG bbs) currBb = analyzeInstructions ([], bbInstructions currBb) []
       case i of
         Instruction ("v" : vop : _) [_dst, _src, Osgpr [selector]]
           | vop == "readlane" || vop == "writelane",
-            iterCtx <- WaitStatesIterCtx {reverseBbInsts = prev, predBbIdxs = bbPredecessors currBb, walkedInsts = [], walkedBbIdxs = []},
+            iterCtx <- WaitStatesIterCtx {reverseBbInsts = prev, predBbIdxs = bbEntries currBb, walkedInsts = [], walkedBbIdxs = []},
             Just (missingStates, path) <- missingWaitStatesPath 4 selector iterCtx ->
             let error =
                   R.InstructionRequired
@@ -55,5 +55,5 @@ analyzeBb (CFG bbs) currBb = analyzeInstructions ([], bbInstructions currBb) []
       where
         walkBb i =
           let bb = bbs !! i
-              bbCtx = ctx {reverseBbInsts = reverse $ bbInstructions bb, predBbIdxs = bbPredecessors bb, walkedBbIdxs = i : walkedBbIdxs ctx}
+              bbCtx = ctx {reverseBbInsts = reverse $ bbInstructions bb, predBbIdxs = bbEntries bb, walkedBbIdxs = i : walkedBbIdxs ctx}
            in missingWaitStatesPath minStates sgprIdx bbCtx
