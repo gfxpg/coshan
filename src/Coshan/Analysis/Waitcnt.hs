@@ -13,8 +13,8 @@ import qualified Data.Set as Set
 checkWaitcnts :: DisassembledKernel -> CFG -> [R.LogMessage]
 checkWaitcnts _ cfg = Map.foldrWithKey' printMessage [] logMap
   where
-    emptyCtx = IterCtx {ctxInEvents = Map.singleton 0 Map.empty, ctxLog = Map.empty}
-    logMap = ctxLog $ analyzeCfg cfg emptyCtx 0
+    emptyCtx = IterCtx {ctxOutEvents = Map.empty, ctxLog = Map.empty, ctxNesting = 0}
+    logMap = ctxLog $ foldlWithSuccessors' analyzeBb emptyCtx Map.empty 0 cfg
     printMessage loc ctrs log =
       let error =
             R.InstructionRequired
@@ -52,24 +52,24 @@ type Log = Map WaitcntLocation (Map WaitCounter Int)
 data WaitCounter = WaitVmcnt | WaitLgkmcnt
   deriving (Eq, Ord)
 
-data IterCtx = IterCtx {ctxInEvents :: !(Map BasicBlockIdx BbMemEvents), ctxLog :: !Log}
+data IterCtx = IterCtx {ctxOutEvents :: !(Map BasicBlockIdx BbMemEvents), ctxLog :: !Log, ctxNesting :: Int}
 
-analyzeCfg :: CFG -> IterCtx -> BasicBlockIdx -> IterCtx
-analyzeCfg (CFG bbs) ctx bbIdx = foldr analyzeSuccessor ctx {ctxLog = Map.union outLog (ctxLog ctx)} (bbSuccessors currBb)
+type InEvents = BbMemEvents
+
+analyzeBb :: IterCtx -> InEvents -> (BasicBlock, BasicBlockIdx) -> (IterCtx, Maybe InEvents)
+analyzeBb ctx inEvents (BasicBlock {bbInstructions = instructions}, bbIdx) =
+  case Map.lookup bbIdx (ctxOutEvents ctx) of
+    Just lastPassOutEvents | outEvents `Map.isSubmapOf` lastPassOutEvents -> (ctx', Nothing)
+    _ -> (ctx', Just outEvents)
   where
-    currBb = bbs !! bbIdx
-    Just inEvents = Map.lookup bbIdx (ctxInEvents ctx)
-    (outEvents, outLog) = analyzeInstructions (bbInstructions currBb) (inEvents, ctxLog ctx)
-    analyzeSuccessor succIdx succCtx = case Map.lookup succIdx (ctxInEvents succCtx) of
-      Just succEvents | outEvents `Map.isSubmapOf` succEvents -> succCtx
-      _ -> analyzeCfg (CFG bbs) succCtx {ctxInEvents = Map.insertWith Map.union succIdx outEvents (ctxInEvents ctx)} succIdx
+    ctx' = ctx {ctxLog = Map.union outLog (ctxLog ctx), ctxOutEvents = Map.insertWith Map.union bbIdx outEvents (ctxOutEvents ctx)}
+    (outEvents, outLog) = analyzeInstructions instructions (inEvents, ctxLog ctx)
     analyzeInstructions [] (bbEvents, log) = (bbEvents, log)
     analyzeInstructions ((pc, i) : next) (bbEvents, log) =
       case i of
         Instruction ["s", "waitcnt"] expr ->
           analyzeInstructions next (updateEventsOnWaitcnt expr bbEvents, log)
         Instruction _ _ ->
-          --trace ("dst: " ++ show dstGprs ++ ", srcs: " ++ show srcGprs ++ ", events: " ++ show bbEvents') $
           analyzeInstructions next (bbEvents'', log')
           where
             (dstGprs, srcGprs) = extractDstSrcGprs i

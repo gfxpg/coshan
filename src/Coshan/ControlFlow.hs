@@ -1,8 +1,16 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Coshan.ControlFlow (buildCfg, CFG (..), BasicBlock (..), BasicBlockIdx) where
+module Coshan.ControlFlow
+  ( buildCfg,
+    CFG (..),
+    BasicBlock (..),
+    BasicBlockIdx,
+    module Coshan.ControlFlow.Folds,
+  )
+where
 
 import Control.Monad ((>=>))
+import Coshan.ControlFlow.Folds
 import Coshan.ControlFlow.Types
 import Coshan.Disassembler (Instruction (..), Operand (..), PC)
 import Data.List (find, nub)
