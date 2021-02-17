@@ -5,6 +5,7 @@ module Coshan.ControlFlow
     CFG (..),
     BasicBlock (..),
     BasicBlockIdx,
+    BasicBlockExitPoint (..),
     module Coshan.ControlFlow.Folds,
   )
 where

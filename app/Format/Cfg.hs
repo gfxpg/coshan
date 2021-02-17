@@ -15,12 +15,12 @@ printCfg kernel = B.hPutBuilder stdout . formatCfg kernel
 formatCfg :: DisassembledKernel -> CFG -> B.Builder
 formatCfg kernel (CFG bbs) = mconcat $ putBb <$> zip [0 ..] bbs
   where
-    putBb (bbIdx, BasicBlock {bbInstructions = insts, bbPredecessors = predIdxs, bbSuccessors = succIdxs}) =
+    putBb (bbIdx, BasicBlock {bbInstructions = insts, bbEntries = predIdxs, bbExit = exit}) =
       putBbLabel bbIdx
         <> ":\t /* predecessors: "
         <> strJoin ", " (putBbLabel <$> predIdxs)
-        <> ", successors: "
-        <> strJoin ", " (putBbLabel <$> succIdxs)
+        <> ", exit: "
+        <> putBbExit exit
         <> " */\n"
         <> putInstructions insts ""
         <> ch '\n'
@@ -35,6 +35,12 @@ formatCfg kernel (CFG bbs) = mconcat $ putBb <$> zip [0 ..] bbs
           | otherwise =
             acc <> putInstruction pc i (BStr.length (disasmInstructionsBin kernel) - pc)
         putInstructions [] acc = acc
+        putBbExit (BbExitCondJump bb1 bb2) = "conditional jump to bb" <> B.intDec bb1 <> " or bb" <> B.intDec bb2
+        putBbExit (BbExitJump bb1) = "jump to bb" <> B.intDec bb1
+        putBbExit (BbExitFallThrough bb1) = "bb" <> B.intDec bb1
+        putBbExit (BbExitJumpSavePc _ bb1) = "call to bb" <> B.intDec bb1
+        putBbExit (BbExitDynamic _) = "dynamic return (jump to SGPR)"
+        putBbExit BbExitTerminal = "none (program end)"
     putInstruction pc (Instruction op ops) size = B.lazyByteString asmInstruction <> putMeta
       where
         asmInstruction = B.toLazyByteString (opcode <> ch ' ' <> operands)

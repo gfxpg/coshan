@@ -7,7 +7,6 @@ import Coshan.Analysis.HazardRWLane
 import Coshan.Analysis.Waitcnt
 import Coshan.ControlFlow
 import Coshan.Disassembler
-import Coshan.Reporting
 import Data.Bifunctor (second)
 import qualified Data.ByteString as B
 import Format.Cfg (printCfg)
