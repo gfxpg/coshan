@@ -3,66 +3,71 @@ module Coshan.Analysis.Waitcnt (checkWaitcnts) where
 import Coshan.ControlFlow
 import Coshan.Disassembler
 import qualified Coshan.Reporting as R
+import Data.Bifunctor (first)
 import qualified Data.ByteString.Char8 as BC8
-import Data.List (find, foldl')
+import Data.List (foldl', intercalate, intersect, isSubsequenceOf)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe)
+import Data.Set (Set)
 import qualified Data.Set as Set
+import Debug.Trace
 
 checkWaitcnts :: DisassembledKernel -> CFG -> [R.LogMessage]
 checkWaitcnts _ cfg = Map.foldrWithKey' printMessage [] logMap
   where
-    emptyCtx = IterCtx {ctxOutEvents = Map.empty, ctxLog = Map.empty, ctxNesting = 0}
-    logMap = ctxLog $ foldlWithSuccessors' analyzeBb emptyCtx Map.empty 0 cfg
-    printMessage loc ctrs log =
-      let error =
-            R.InstructionRequired
-              { R.instreqInstruction = Instruction ["s", "waitcnt"] (op <$> Map.toList ctrs),
-                R.instreqBacktrace = [locOpIssuedAt loc],
-                R.instreqExplanation = "Source register " ++ reg (locOperand loc) ++ " is read from memory. An s_waitcnt instruction is required to ensure that the operation is completed."
+    emptyCtx = IterCtx {ctxOutEvents = Map.empty, ctxLog = Map.empty, ctxVisitedEvents = Set.empty, ctxNesting = 0}
+    logMap = ctxLog $ foldlWithSuccessors' analyzeBb emptyCtx [] 0 cfg
+    printMessage loc (waitctr, explanation) log =
+      let traceEvent (i, (pc, [], etype)) = (pc, "(" ++ show i ++ ")" ++ " " ++ show etype)
+          traceEvent (i, (pc, gprs, etype)) = (pc, "(" ++ show i ++ ")" ++ " " ++ show etype ++ ": " ++ intercalate ", " (show <$> gprs))
+          explRegs = case locGprs loc of
+            [r] -> "register " ++ show r ++ " is"
+            rs -> "registers " ++ intercalate ", " (show <$> rs) ++ " are"
+          error =
+            R.CounterWaitRequired
+              { R.ctrreqWaitClause = waitctr,
+                R.ctrreqSucceedingEvents = traceEvent <$> zip [(0 :: Int) ..] (locQueueSucc loc),
+                R.ctrreqPrecedingEvents = traceEvent <$> zip [(length $ locQueueSucc loc) ..] (locQueuePred loc),
+                R.ctrreqExplanation = "Source " ++ explRegs ++ " read from memory. " ++ explanation
               }
        in R.LogMessage (locGprUsedAt loc) error : log
-      where
-        reg (Ovgpr [r]) = "v" ++ show r
-        reg (Osgpr [r]) = "s" ++ show r
-        reg _ = ""
-        op (WaitVmcnt, c) = Ovmcnt c
-        op (WaitLgkmcnt, c) = Olgkmcnt c
 
 data Gpr = Sgpr Int | Vgpr Int
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord)
+
+instance Show Gpr where
+  show (Sgpr i) = "s" ++ show i
+  show (Vgpr i) = "v" ++ show i
 
 data MemEvent = EventVMem | EventSLoad | EventLDS
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord)
 
-type GprMemEvents = Map PC (Map MemEvent Int)
+instance Show MemEvent where
+  show EventVMem = "vmem access"
+  show EventSLoad = "scalar read (returned out-of-order)"
+  show EventLDS = "lds access"
 
-type BbMemEvents = Map Gpr GprMemEvents
-
-data WaitcntLocation = WaitcntLocation {locGprUsedAt, locOpIssuedAt :: !PC, locOperand :: !Operand}
+data WaitcntLocation = WaitcntLocation {locGprUsedAt :: !PC, locGprs :: [Gpr], locQueueSucc :: [(PC, [Gpr], MemEvent)], locQueuePred :: [(PC, [Gpr], MemEvent)]}
   deriving (Eq, Show)
 
 instance Ord WaitcntLocation where
-  compare WaitcntLocation {locGprUsedAt = pc, locOpIssuedAt = sourcePc} WaitcntLocation {locGprUsedAt = pc2, locOpIssuedAt = sourcePc2} =
-    mconcat [compare pc pc2, compare sourcePc sourcePc2]
+  compare WaitcntLocation {locGprUsedAt = pc, locGprs = gprs} WaitcntLocation {locGprUsedAt = pc2, locGprs = gprs2} =
+    mconcat [compare pc pc2, compare gprs gprs2]
 
-type Log = Map WaitcntLocation (Map WaitCounter Int)
+type Log = Map WaitcntLocation (Operand, String)
 
-data WaitCounter = WaitVmcnt | WaitLgkmcnt
-  deriving (Eq, Ord)
+data IterCtx = IterCtx {ctxOutEvents :: !(Map BasicBlockIdx PendingEvents), ctxLog :: !Log, ctxVisitedEvents :: !(Set PC), ctxNesting :: Int}
 
-data IterCtx = IterCtx {ctxOutEvents :: !(Map BasicBlockIdx BbMemEvents), ctxLog :: !Log, ctxNesting :: Int}
+type PendingEvents = [(PC, [Gpr], MemEvent)]
 
-type InEvents = BbMemEvents
-
-analyzeBb :: IterCtx -> InEvents -> (BasicBlock, BasicBlockIdx) -> (IterCtx, Maybe InEvents)
+analyzeBb :: IterCtx -> PendingEvents -> (BasicBlock, BasicBlockIdx) -> (IterCtx, Maybe PendingEvents)
 analyzeBb ctx inEvents (BasicBlock {bbInstructions = instructions}, bbIdx) =
   case Map.lookup bbIdx (ctxOutEvents ctx) of
-    Just lastPassOutEvents | outEvents `Map.isSubmapOf` lastPassOutEvents -> (ctx', Nothing)
+    Just lastPassOutEvents | outEvents `isSubsequenceOf` lastPassOutEvents -> (ctx', Nothing)
     _ -> (ctx', Just outEvents)
   where
-    ctx' = ctx {ctxLog = Map.union outLog (ctxLog ctx), ctxOutEvents = Map.insertWith Map.union bbIdx outEvents (ctxOutEvents ctx)}
+    ctx' = ctx {ctxLog = Map.union outLog (ctxLog ctx), ctxOutEvents = Map.insertWith appendToOutEvents bbIdx outEvents (ctxOutEvents ctx)}
+    appendToOutEvents new existing = existing ++ new
     (outEvents, outLog) = analyzeInstructions instructions (inEvents, ctxLog ctx)
     analyzeInstructions [] (bbEvents, log) = (bbEvents, log)
     analyzeInstructions ((pc, i) : next) (bbEvents, log) =
@@ -72,62 +77,63 @@ analyzeBb ctx inEvents (BasicBlock {bbInstructions = instructions}, bbIdx) =
         Instruction _ _ ->
           analyzeInstructions next (bbEvents'', log')
           where
-            (dstGprs, srcGprs) = extractDstSrcGprs i
-            (bbEvents', log') = foldl' (checkSrcPendingLoads pc) (bbEvents, log) srcGprs
+            (_dstGprs, srcGprs) = extractDstSrcGprs i
+            (bbEvents', log') = checkPendingEvents pc (bbEvents, log) srcGprs
             bbEvents'' = case extractGprEvents i of
-              Just (eventGprs, events) -> addEvents pc events eventGprs $ incExistingEvents pc events bbEvents'
-              _ -> foldr Map.delete bbEvents' dstGprs -- drop overwritten gprs
+              Just (eventGprs, events) -> addEvents pc events eventGprs bbEvents'
+              _ -> bbEvents' -- todo drop overwritten gprs?
 
-addEvents :: PC -> [MemEvent] -> [Gpr] -> BbMemEvents -> BbMemEvents
-addEvents pc events gprs bbEvents = foldr insertGprEvent bbEvents gprs
+addEvents :: PC -> [MemEvent] -> [Gpr] -> PendingEvents -> PendingEvents
+addEvents pc etypes gprs pevents = ((pc,gprs,) <$> etypes) ++ pevents
+
+checkPendingEvents :: PC -> (PendingEvents, Log) -> [Gpr] -> (PendingEvents, Log)
+-- TODO issue one warning per PC, group pending events into one s_waitcnt expression
+checkPendingEvents checkPc (pevents, log) checkGprs =
+  {-trace ("CHK PC" ++ show checkPc ++ show checkGprs ++ ", pevents: " ++ show pevents ++ ", out: " ++ show (pevents', log')) $-} (pevents', log')
   where
-    insertGprEvent gpr = Map.insertWith (Map.unionWith min) gpr (Map.singleton pc $ Map.fromList $ (,0) <$> events)
-
-checkSrcPendingLoads :: PC -> (BbMemEvents, Log) -> Gpr -> (BbMemEvents, Log)
-checkSrcPendingLoads pc (bbEvents, log) gpr = case Map.lookup gpr bbEvents of
-  Just gprEvents -> (Map.delete gpr bbEvents, log')
-    where
-      log' = Map.foldrWithKey' logCountersForEventsIssuedAt log gprEvents
-      operand = case gpr of Sgpr s -> Osgpr [s]; Vgpr v -> Ovgpr [v]
-      logCountersForEventsIssuedAt issuedAtPc events = Map.insert location counters
-        where
-          location = WaitcntLocation {locGprUsedAt = pc, locOpIssuedAt = issuedAtPc, locOperand = operand}
-          existingWaits = fromMaybe Map.empty $ Map.lookup location log
-          counters = Map.foldrWithKey' counterForEvent existingWaits events
-          counterForEvent EventVMem val = Map.insertWith min WaitVmcnt val
-          -- If there are multiple types of lgkmcnt instructions in flight, they will return out of order so we need to wait for all of them.
-          counterForEvent EventLDS val
-            | EventSLoad `Set.member` outstandingEventsAtCurrentPc = Map.insert WaitLgkmcnt 0
-            | otherwise = Map.insert WaitLgkmcnt val
-          -- Scalar loads are always returned out of order so we need to wait for lgkmcnt to reach 0.
-          counterForEvent EventSLoad _ = Map.insert WaitLgkmcnt 0
-      outstandingEventsAtCurrentPc = Map.foldl' (Map.foldrWithKey' addEventsBeforeCurrentPc) Set.empty bbEvents
-      addEventsBeforeCurrentPc eventsPc eventsMap acc
-        | eventsPc < pc = acc `Set.union` Map.keysSet eventsMap
-        | otherwise = acc
-  _ -> (bbEvents, log)
-
-updateEventsOnWaitcnt :: [Operand] -> BbMemEvents -> BbMemEvents
-updateEventsOnWaitcnt waitops = Map.mapMaybe dropEvents
-  where
-    dropEvents eventsByPc = if Map.null newEvents then Nothing else Just newEvents
+    pendingEvents = filter (\(_, gprs, _) -> not $ null $ checkGprs `intersect` gprs) pevents
+    log' = foldl' logGprUsageWithPendingEvent log pendingEvents
+    pevents' = (\e@(pc, _, etype) -> if e `elem` pendingEvents then (pc, [], etype) else e) <$> pevents
+    logGprUsageWithPendingEvent log (epc, egprs, etype) = Map.insert location (counterForEvent, explanation) log
       where
-        newEvents = Map.mapMaybe eventsAfterWait eventsByPc
-        eventsAfterWait :: Map MemEvent Int -> Maybe (Map MemEvent Int)
-        eventsAfterWait events = if Map.null events' then Nothing else Just events'
-          where
-            events' = Map.filterWithKey (\ty c -> not (waitedFor ty c)) events
-            waitedFor ty c = case find ((== ty) . fst) eventsWaitedFor of
-              Just (_, cWaited) | c >= cWaited -> True
-              _ -> False
-    eventsWaitedFor = opToEvents =<< waitops
+        pendingGprs = checkGprs `intersect` egprs
+        location = WaitcntLocation {locGprs = pendingGprs, locGprUsedAt = checkPc, locQueueSucc = succEvents, locQueuePred = currAndPrecedingEvents}
+        explanationAwaitSuccs 1 = "The operation is complete when the counter reaches 1 because there is one operation enqueued after it."
+        explanationAwaitSuccs c = "The operation is complete when the counter reaches " ++ show c ++ " because there are " ++ show c ++ " operations enqueued after it."
+        explanationOutOfOrder = "The operation is complete only when the counter reaches 0 because there are out-of-order operations enqueued."
+        (counterForEvent, explanation) = case (etype, counterReturnsOutOfOrder) of
+          (EventVMem, _) -> let c = length succEvents in (Ovmcnt c, explanationAwaitSuccs c)
+          (_, False) -> let c = length succEvents in (Olgkmcnt c, explanationAwaitSuccs c)
+          (_, True) -> (Olgkmcnt 0, explanationOutOfOrder)
+        ((succEvents, currAndPrecedingEvents), counterReturnsOutOfOrder) = case etype of
+          EventVMem ->
+            let ofType = filter (\(_, _, ty) -> ty == EventVMem) pevents
+             in (break (\(pc, _, _) -> pc == epc) ofType, False)
+          _ ->
+            break (\(pc, _, _) -> pc == epc)
+              `first` foldr
+                ( \e@(_, _, ty) (es, mixed) ->
+                    if ty `elem` [EventLDS, EventSLoad] then (e : es, mixed || ty == EventSLoad) else (es, mixed)
+                )
+                ([], False)
+                pevents
+
+updateEventsOnWaitcnt :: [Operand] -> PendingEvents -> PendingEvents
+updateEventsOnWaitcnt waitops pevents = foldl' updateOutstanding pevents (opToEvents =<< waitops)
+  where
+    updateOutstanding :: [(PC, [Gpr], MemEvent)] -> (MemEvent, Int) -> [(PC, [Gpr], MemEvent)]
+    updateOutstanding q (eType, eTargetCount) = fst $ foldr dropEvent ([], countToDrop) q
+      where
+        countToDrop = max 0 (countOfType - eTargetCount)
+        countOfType = length $ filter (\(_, _, ty) -> ty == eType) q
+        dropEvent e (q, 0) = (e : q, 0)
+        dropEvent e@(_, _, ty) (q, toDrop)
+          | ty == eType = (q, toDrop - 1)
+          | otherwise =  (e : q, toDrop)
     opToEvents (Ovmcnt c) = [(EventVMem, c)]
     opToEvents (Olgkmcnt c) = [(EventSLoad, c), (EventLDS, c)]
     opToEvents (Oexpcnt _) = []
     opToEvents o = error $ "Unexpected s_waitcnt operand " ++ show o
-
-incExistingEvents :: PC -> [MemEvent] -> BbMemEvents -> BbMemEvents
-incExistingEvents pc events = Map.map $ Map.map $ Map.mapWithKey (\ty c -> if ty `elem` events then c + 1 else c)
 
 extractDstSrcGprs :: Instruction -> ([Gpr], [Gpr])
 extractDstSrcGprs i = case i of

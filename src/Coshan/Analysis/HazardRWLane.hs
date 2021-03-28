@@ -31,7 +31,7 @@ analyzeBb (CFG bbs) currBb = analyzeInstructions ([], bbInstructions currBb) []
             let error =
                   R.InstructionRequired
                     { R.instreqInstruction = Instruction ["s", "nop"] [OConst $ missingStates - 1],
-                      R.instreqBacktrace = fst <$> path,
+                      R.instreqBacktrace = (,Nothing) . fst <$> path,
                       R.instreqExplanation = "A v_readlane/v_writelane instruction with an SGPR lane selector requires 4 wait states after the selector has been modified by a VALU instruction."
                     }
              in analyzeInstructions ((pc, i) : prev, next) (R.LogMessage pc error : log)

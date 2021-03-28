@@ -33,13 +33,37 @@ putError kernel (R.LogMessage pc error) = case error of
       [ P.bold "Problem:" <+> "Missing instruction" <+> (P.bold . P.magenta . putInstruction) i,
         P.bold "Explanation:" <+> P.text expl,
         P.bold "Location:",
-        putTrace kernel pc,
+        putTrace kernel (pc, Nothing),
         P.bold "Backtrace:",
         (catWithBreak . (putTrace kernel <$>)) bt
       ]
+  R.CounterWaitRequired {R.ctrreqWaitClause = clause, R.ctrreqSucceedingEvents = succ, R.ctrreqPrecedingEvents = pred, R.ctrreqExplanation = expl} ->
+    P.vcat $
+      [ P.bold "Problem:" <+> "Missing" <+> (P.bold . P.magenta . putInstruction) (Instruction ["s", "waitcnt"] [clause]),
+        P.bold "Explanation:" <+> P.text expl,
+        P.bold "Location:",
+        putTrace kernel (pc, Nothing)
+      ]
+        ++ ( case succ of
+               [] -> []
+               ops -> [P.bold "Newer unwaited operations in the queue:", (catWithBreak . (putTrace kernel <$>)) ops]
+           )
+        ++ ( case pred of
+               [op] ->
+                 [ P.bold "Memory operation:",
+                   putTrace kernel op
+                 ]
+               op : pred ->
+                 [ P.bold "Memory operation:",
+                   putTrace kernel op,
+                   P.bold "Earlier unwaited operations in the queue:",
+                   (catWithBreak . (putTrace kernel <$>)) pred
+                 ]
+               _ -> []
+           )
 
-putTrace :: DisassembledKernel -> PC -> P.Doc
-putTrace kernel pc = P.vcat (putInstW <$> window)
+putTrace :: DisassembledKernel -> (PC, a) -> P.Doc
+putTrace kernel (pc, _) = P.vcat (putInstW <$> window)
   where
     window = instructionWindow (disasmInstructions kernel) pc
     putInstW (instPc, i) =

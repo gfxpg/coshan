@@ -28,7 +28,7 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
         `shouldBe` [ LogMessage 12 $
                        InstructionRequired
                          { instreqInstruction = Instruction ["s", "nop"] [OConst 0],
-                           instreqBacktrace = [0, 8],
+                           instreqBacktrace = [(0, Nothing), (8, Nothing)],
                            instreqExplanation = "A v_readlane/v_writelane instruction with an SGPR lane selector requires 4 wait states after the selector has been modified by a VALU instruction."
                          }
                    ]
@@ -54,7 +54,7 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
         `shouldBe` [ LogMessage 28 $
                        InstructionRequired
                          { instreqInstruction = Instruction ["s", "nop"] [OConst 1],
-                           instreqBacktrace = [0, 8, 12],
+                           instreqBacktrace = [(0, Nothing), (8, Nothing), (12, Nothing)],
                            instreqExplanation = "A v_readlane/v_writelane instruction with an SGPR lane selector requires 4 wait states after the selector has been modified by a VALU instruction."
                          }
                    ]
@@ -82,7 +82,7 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
         `shouldBe` [ LogMessage 8 $
                        InstructionRequired
                          { instreqInstruction = Instruction ["s", "nop"] [OConst 2],
-                           instreqBacktrace = [20, 28],
+                           instreqBacktrace = [(20, Nothing), (28, Nothing)],
                            instreqExplanation = "A v_readlane/v_writelane instruction with an SGPR lane selector requires 4 wait states after the selector has been modified by a VALU instruction."
                          }
                    ]
