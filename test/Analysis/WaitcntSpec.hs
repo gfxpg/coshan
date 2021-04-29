@@ -159,7 +159,7 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
                      CounterWaitRequired
                        { ctrreqWaitClause = Ovmcnt 1,
                          ctrreqSucceedingEvents = [(40, "(0) vmem access: v4, v5")],
-                         ctrreqPrecedingEvents = [(32, "(1) vmem access: v0, v1"), (40, "(2) vmem access: v4, v5"), (32, "(3) vmem access"), (40, "(4) vmem access: v4, v5"), (32, "(5) vmem access"), (0, "(6) vmem access")],
+                         ctrreqPrecedingEvents = [(32, "(1) vmem access: v0, v1"), (40, "(2) vmem access: v4, v5"), (32, "(3) vmem access"), (0, "(4) vmem access")],
                          ctrreqExplanation = "Source register v1 is read from memory. The operation is complete when the counter reaches 1 because there is one operation enqueued after it."
                        }
                  ]

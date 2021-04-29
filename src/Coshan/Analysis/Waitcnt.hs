@@ -5,7 +5,7 @@ import Coshan.Disassembler
 import qualified Coshan.Reporting as R
 import Data.Bifunctor (first)
 import qualified Data.ByteString.Char8 as BC8
-import Data.List (foldl', intercalate, intersect, isSubsequenceOf)
+import Data.List (foldl', intercalate, intersect, nub)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
@@ -15,7 +15,7 @@ import Debug.Trace
 checkWaitcnts :: DisassembledKernel -> CFG -> [R.LogMessage]
 checkWaitcnts _ cfg = Map.foldrWithKey' printMessage [] logMap
   where
-    emptyCtx = IterCtx {ctxOutEvents = Map.empty, ctxLog = Map.empty, ctxVisitedEvents = Set.empty, ctxNesting = 0}
+    emptyCtx = IterCtx {ctxVisitedOutEvents = Map.empty, ctxLog = Map.empty, ctxNesting = 0}
     logMap = ctxLog $ foldlWithSuccessors' analyzeBb emptyCtx [] 0 cfg
     printMessage loc (waitctr, explanation) log =
       let traceEvent (i, (pc, [], etype)) = (pc, "(" ++ show i ++ ")" ++ " " ++ show etype)
@@ -56,18 +56,17 @@ instance Ord WaitcntLocation where
 
 type Log = Map WaitcntLocation (Operand, String)
 
-data IterCtx = IterCtx {ctxOutEvents :: !(Map BasicBlockIdx PendingEvents), ctxLog :: !Log, ctxVisitedEvents :: !(Set PC), ctxNesting :: Int}
+data IterCtx = IterCtx {ctxVisitedOutEvents :: !(Map BasicBlockIdx (Set PendingEvents)), ctxLog :: !Log, ctxNesting :: Int}
 
 type PendingEvents = [(PC, [Gpr], MemEvent)]
 
 analyzeBb :: IterCtx -> PendingEvents -> (BasicBlock, BasicBlockIdx) -> (IterCtx, Maybe PendingEvents)
 analyzeBb ctx inEvents (BasicBlock {bbInstructions = instructions}, bbIdx) =
-  case Map.lookup bbIdx (ctxOutEvents ctx) of
-    Just lastPassOutEvents | outEvents `isSubsequenceOf` lastPassOutEvents -> (ctx', Nothing)
+  case Map.lookup bbIdx (ctxVisitedOutEvents ctx) of
+    Just visitedOutEvents | nub outEvents `elem` visitedOutEvents -> (ctx', Nothing)
     _ -> (ctx', Just outEvents)
   where
-    ctx' = ctx {ctxLog = Map.union outLog (ctxLog ctx), ctxOutEvents = Map.insertWith appendToOutEvents bbIdx outEvents (ctxOutEvents ctx)}
-    appendToOutEvents new existing = existing ++ new
+    ctx' = ctx {ctxLog = Map.union outLog (ctxLog ctx), ctxVisitedOutEvents = Map.insertWith Set.union bbIdx (Set.singleton (nub outEvents)) (ctxVisitedOutEvents ctx)}
     (outEvents, outLog) = analyzeInstructions instructions (inEvents, ctxLog ctx)
     analyzeInstructions [] (bbEvents, log) = (bbEvents, log)
     analyzeInstructions ((pc, i) : next) (bbEvents, log) =
