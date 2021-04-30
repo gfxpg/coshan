@@ -3,7 +3,7 @@
 
 module Main where
 
-import Coshan.Analysis.HazardRWLane
+import Coshan.Analysis.WaitStateHazard
 import Coshan.Analysis.Waitcnt
 import Coshan.ControlFlow
 import Coshan.Disassembler
@@ -43,7 +43,12 @@ main = do
   let nopLocations = fst . head . readHex <$> optNops args
 
   co <- B.readFile (optCo args)
-  kernel <- insertNops nopLocations . head <$> readElf target co
+  kernels <- readElf target co
+
+  let kernel =
+        case kernels of
+          firstKernel : _ -> insertNops nopLocations firstKernel
+          _ -> error $ "No kernels found in " ++ optCo args
 
   let instructions = second parseInstruction <$> disasmInstructions kernel
   let cfg = buildCfg instructions
@@ -53,7 +58,7 @@ main = do
       printCfg kernel cfg
     _ -> do
       printAnalysisReport kernel $
-        [ ("Manually Inserted Wait States (s_nop)", checkRwLaneHazards kernel cfg),
+        [ ("Manually Inserted Wait States (s_nop)", checkWaitStateHazards kernel cfg),
           ("Data Dependency Resolution (s_waitcnt)", checkWaitcnts kernel cfg)
         ]
 

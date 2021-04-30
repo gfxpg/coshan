@@ -1,9 +1,9 @@
 {-# LANGUAGE QuasiQuotes #-}
 
-module Analysis.HazardRWLaneSpec where
+module Analysis.WaitStateHazardSpec where
 
 import Control.Monad (forM_)
-import Coshan.Analysis.HazardRWLane
+import Coshan.Analysis.WaitStateHazard
 import Coshan.Disassembler
 import Coshan.Reporting
 import Data.String.Interpolate (i)
@@ -24,7 +24,7 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
             "v_readlane_b32" -> "v_readlane_b32 s1, v0, s3" :: String
             "v_writelane_b32" -> "v_writelane_b32 v0, 1, s3" :: String}
         |]
-      checkRwLaneHazards kernel cfg
+      checkWaitStateHazards kernel cfg
         `shouldBe` [ LogMessage 12 $
                        InstructionRequired
                          { instreqInstruction = Instruction ["s", "nop"] [OConst 0],
@@ -50,7 +50,7 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
             "v_readlane_b32" -> "v_readlane_b32 s1, v0, s3" :: String
             "v_writelane_b32" -> "v_writelane_b32 v0, 1, s3" :: String}
         |]
-      checkRwLaneHazards kernel cfg
+      checkWaitStateHazards kernel cfg
         `shouldBe` [ LogMessage 28 $
                        InstructionRequired
                          { instreqInstruction = Instruction ["s", "nop"] [OConst 1],
@@ -78,7 +78,7 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
           s_cbranch_scc0 loop             // PC = 28
           s_endpgm
         |]
-      checkRwLaneHazards kernel cfg
+      checkWaitStateHazards kernel cfg
         `shouldBe` [ LogMessage 8 $
                        InstructionRequired
                          { instreqInstruction = Instruction ["s", "nop"] [OConst 2],
@@ -105,4 +105,4 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
           s_cbranch_scc0 loop
           s_endpgm
         |]
-      checkRwLaneHazards kernel cfg `shouldBe` []
+      checkWaitStateHazards kernel cfg `shouldBe` []
