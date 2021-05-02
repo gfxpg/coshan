@@ -3,8 +3,8 @@ module Coshan.Disassembler.ElfReader (readElf) where
 import Control.Monad (forM)
 import Coshan.Disassembler.LLVM
 import Coshan.Disassembler.Types
-import Data.Bifunctor (first)
-import Data.ByteString (ByteString)
+import Data.Bits (shift, (.|.))
+import Data.ByteString (ByteString, unpack)
 import qualified Data.ByteString.Char8 as BC8
 import qualified Data.Elf as E
 import Data.List (find)
@@ -35,7 +35,10 @@ findKernels textSection = extractKernels [] . foldr findKernels ([], [])
           kBin = BC8.take kSize $ BC8.drop kOffset $ E.elfSectionData textSection
           (kDesc, kInstrs) = case find ((== kName) . fst) kdescs of
             Just (_, kd) -> (KernelDescriptorV3 kd, kBin)
-            _ -> KernelDescriptorV2 `first` BC8.splitAt 256 kBin
+            _ ->
+              let kernelCodeT = BC8.take 256 kBin
+                  entryByteOffset = decodeInt64LE $ BC8.take 8 $ BC8.drop 16 kernelCodeT
+               in (KernelDescriptorV2 kernelCodeT, BC8.drop entryByteOffset kBin)
           acc' = acc ++ [DisassembledKernel {disasmKernelName = kName, disasmKernelCodeT = kDesc, disasmInstructionsBin = kInstrs, disasmInstructions = []}]
        in extractKernels acc' (rest, kdescs)
     findKernels sym (ktexts, kdescs)
@@ -57,3 +60,9 @@ findKernels textSection = extractKernels [] . foldr findKernels ([], [])
                     else (ktexts, (kdKernel, kdData) : kdescs)
           _ -> (ktexts, kdescs)
       | otherwise = (ktexts, kdescs)
+
+decodeInt64LE :: ByteString -> Int
+decodeInt64LE = go 0 . unpack
+  where
+    go _ [] = 0
+    go shiftBy (byte : rest) = let i = (fromIntegral byte :: Int) in shift i shiftBy .|. go (shiftBy + 8) rest
