@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 module Coshan.ControlFlow
   ( buildCfg,
     CFG (..),
@@ -14,7 +12,7 @@ import Control.Monad ((>=>))
 import Coshan.ControlFlow.Folds
 import Coshan.ControlFlow.Types
 import Coshan.Disassembler (Instruction (..), Operand (..), PC)
-import Data.List (find, nub)
+import Data.List (nub)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes)
@@ -26,8 +24,7 @@ import qualified Data.Set as Set
 
 buildCfg :: [(PC, Instruction)] -> CFG
 buildCfg instructions =
-  let branches = scanBranchInstructions instructions
-      leaders = scanBlockLeaders branches
+  let (branches, leaders) = scanBranches instructions
    in CFG $ fillPredecessors leaders branches $ splitInstructionsIntoBlocks leaders branches instructions
 
 fillPredecessors :: Set PC -> Map PC (BasicBlockExitPoint PC) -> [BasicBlock] -> [BasicBlock]
@@ -51,19 +48,20 @@ fillPredecessors blockLeaders branches blocks = blocks'
           BbExitCondJump succBbIdx1 succBbbIdx2 -> Map.insertWith (++) succBbIdx1 [bbIdx] $ Map.insertWith (++) succBbbIdx2 [bbIdx] acc
           _ -> acc
     followCallToReturnPcs :: SgprPair -> PC -> [PC]
-    followCallToReturnPcs callGprs currentPc =
-      let closestRet = find (\(retPc, retGprs) -> retPc >= currentPc && retGprs == callGprs) returnPoints
-          closestBr = Map.lookupGE currentPc branchPoints
-       in case (closestRet, closestBr) of
-            (Nothing, _) ->
-              [] -- TODO: this should probably be a warning (no s_setpc following s_call)
-            (Just (retPc, _), Just (brPc, brTargets))
-              | retPc > brPc ->
-                nub $ followCallToReturnPcs callGprs =<< brTargets
-            (Just (retPc, _), _) ->
-              [retPc]
-    returnPoints = Map.toAscList $ Map.mapMaybe (\case BbExitDynamic sgprPair -> Just sgprPair; _ -> Nothing) branches
-    branchPoints = Map.mapMaybe (\case BbExitJump pc -> Just [pc]; BbExitCondJump pc1 pc2 -> Just [pc1, pc2]; _ -> Nothing) branches
+    followCallToReturnPcs callGprs currentPc
+      | Just closestBranch <- Map.lookupGE currentPc branches = case closestBranch of
+        (retPc, BbExitDynamic retGprs)
+          | retGprs == callGprs ->
+            [retPc]
+        (_, BbExitCondJump brTargetPc1 brTargetPc2) ->
+          nub $ followCallToReturnPcs callGprs =<< [brTargetPc1, brTargetPc2]
+        (_, BbExitJump brTargetPc) ->
+          followCallToReturnPcs callGprs brTargetPc
+        (_, BbExitTerminal) ->
+          []
+        (otherBrPc, _) ->
+          followCallToReturnPcs callGprs (otherBrPc + 4)
+      | otherwise = []
 
 splitInstructionsIntoBlocks :: Set PC -> Map PC (BasicBlockExitPoint PC) -> [(PC, Instruction)] -> [BasicBlock]
 splitInstructionsIntoBlocks blockLeaders branches instructions = blocks
@@ -85,38 +83,33 @@ splitInstructionsIntoBlocks blockLeaders branches instructions = blocks
           Just (BbExitJumpSavePc sgprPair targetPc)
             | Just targetBb <- Set.lookupIndex targetPc blockLeaders -> BbExitJumpSavePc sgprPair targetBb
           Just (BbExitDynamic sgprPair) -> BbExitDynamic sgprPair
+          Just BbExitTerminal -> BbExitTerminal
           Nothing -> case Set.lookupGT bbEndPc blockLeaders of
             Just succPc | Just succIdx <- Set.lookupIndex succPc blockLeaders -> BbExitFallThrough succIdx
             _ -> BbExitTerminal
           Just _ -> undefined
     makeBlocks blocks remInstructions _ = BasicBlock remInstructions [] BbExitTerminal : blocks
 
-scanBlockLeaders :: Map PC (BasicBlockExitPoint PC) -> Set PC
-scanBlockLeaders =
-  Map.foldlWithKey'
-    ( \s fromPc exitPoint -> Set.insert (fromPc + 4) $ case exitPoint of
-        BbExitJump toPc -> Set.insert toPc s
-        BbExitCondJump toPc1 toPc2 -> Set.insert toPc1 $ Set.insert toPc2 s
-        BbExitJumpSavePc _ toPc -> Set.insert toPc s
-        _ -> s
-    )
-    (Set.singleton 0)
-
-scanBranchInstructions :: [(PC, Instruction)] -> Map PC (BasicBlockExitPoint PC)
-scanBranchInstructions instructions = go instructions Map.empty
+scanBranches :: [(PC, Instruction)] -> (Map PC (BasicBlockExitPoint PC), Set PC)
+scanBranches instructions = go instructions (Map.empty, Set.singleton 0)
   where
     go [] acc = acc
-    go ((pc, i) : rest) acc = go rest $ case i of
+    go ((pc, i) : rest) (branches, leaders) = go rest $ case i of
       Instruction ["s", "branch"] [OConst offset] ->
-        Map.insert pc (BbExitJump (shortJumpTarget pc offset)) acc
+        let toPc = shortJumpTarget pc offset
+         in (Map.insert pc (BbExitJump toPc) branches, Set.insert toPc $ Set.insert (pc + 4) leaders)
       Instruction ("s" : "cbranch" : _) [OConst offset] ->
-        Map.insert pc (BbExitCondJump (shortJumpTarget pc offset) (pc + 4)) acc
+        let toPc = shortJumpTarget pc offset
+         in (Map.insert pc (BbExitCondJump toPc (pc + 4)) branches, Set.insert toPc $ Set.insert (pc + 4) leaders)
       Instruction ("s" : "call" : _) [Osgpr [s1, s2], OConst offset] ->
-        Map.insert pc (BbExitJumpSavePc (SgprPair (s1, s2)) (shortJumpTarget pc offset)) acc
+        let toPc = shortJumpTarget pc offset
+         in (Map.insert pc (BbExitJumpSavePc (SgprPair (s1, s2)) toPc) branches, Set.insert toPc $ Set.insert (pc + 4) leaders)
       Instruction ("s" : "setpc" : _) [Osgpr [s1, s2]] ->
-        Map.insert pc (BbExitDynamic (SgprPair (s1, s2))) acc
+        (Map.insert pc (BbExitDynamic (SgprPair (s1, s2))) branches, Set.insert (pc + 4) leaders)
+      Instruction ["s", "endpgm"] _ ->
+        (Map.insert pc BbExitTerminal branches, Set.insert (pc + 4) leaders)
       _ ->
-        acc
+        (branches, leaders)
 
 shortJumpTarget :: PC -> Int -> PC
 shortJumpTarget pc offset
