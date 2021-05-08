@@ -9,6 +9,7 @@ import qualified Data.ByteString.Internal
 import Data.Word
 import Foreign.C.String
 import Foreign.C.Types
+import Foreign.Marshal.Alloc
 import Foreign.ForeignPtr
 import Foreign.Ptr
 
@@ -18,11 +19,14 @@ type LLVMDisasmContextRefRaw = Ptr ()
 
 type UnusuedRef = Ptr ()
 
-foreign import ccall "llvm-c/Target.h LLVMInitializeAMDGPUTargetInfo" llvmInitializeAMDGPUTargetInfo :: IO ()
+foreign import ccall "llvm-c/Target.h LLVMInitializeAMDGPUTargetInfo"
+  llvmInitializeAMDGPUTargetInfo :: IO ()
 
-foreign import ccall "llvm-c/Target.h LLVMInitializeAMDGPUTargetMC" llvmInitializeAMDGPUTargetMC :: IO ()
+foreign import ccall "llvm-c/Target.h LLVMInitializeAMDGPUTargetMC"
+  llvmInitializeAMDGPUTargetMC :: IO ()
 
-foreign import ccall "llvm-c/Target.h LLVMInitializeAMDGPUDisassembler" llvmInitializeAMDGPUDisassembler :: IO ()
+foreign import ccall "llvm-c/Target.h LLVMInitializeAMDGPUDisassembler"
+  llvmInitializeAMDGPUDisassembler :: IO ()
 
 foreign import ccall "llvm-c/Disassembler.h LLVMCreateDisasmCPU"
   llvmCreateDisasmCPU :: CString -> CString -> UnusuedRef -> CInt -> UnusuedRef -> UnusuedRef -> IO LLVMDisasmContextRefRaw
@@ -38,17 +42,16 @@ getLlvmRef target = do
   llvmInitializeAMDGPUTargetInfo
   llvmInitializeAMDGPUTargetMC
   llvmInitializeAMDGPUDisassembler
-  triple <- newCString $ disasmTriple target
-  cpu <- newCString $ disasmCPU target
-  ctxRefRaw <- llvmCreateDisasmCPU triple cpu nullPtr 0 nullPtr nullPtr
-  newForeignPtr llvmDisasmDispose ctxRefRaw
+  withCString (disasmTriple target) $ \tripleStr ->
+    withCString (disasmCPU target) $ \cpuStr -> do
+      ctxRefRaw <- llvmCreateDisasmCPU tripleStr cpuStr nullPtr 0 nullPtr nullPtr
+      newForeignPtr llvmDisasmDispose ctxRefRaw
 
 disassemble :: LLVMDisasmContextRef -> ByteString -> IO [(PC, ByteString)]
 disassemble ctxRef mcodeStr =
   withForeignPtr mcodePtr $ \mcode ->
     withForeignPtr ctxRef $ \ctx -> do
-      outBufRef <- mallocForeignPtrBytes 256
-      withForeignPtr outBufRef $ \outbuf -> do
+      allocaBytes 256 $ \outbuf -> do
         let disasmInstruction = \pos -> do
               posInc <- llvmDisasmInstruction ctx (mcode `plusPtr` pos) (fromIntegral $ mcodeLen - pos) 0 outbuf (CSize 256)
               let instStrWithoutLeadingTab = castPtr $ outbuf `plusPtr` 1
