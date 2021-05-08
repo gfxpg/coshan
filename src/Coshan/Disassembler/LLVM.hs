@@ -5,7 +5,7 @@ module Coshan.Disassembler.LLVM (LLVMDisasmContextRef, getLlvmRef, disassemble) 
 import Coshan.Disassembler.Types
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC8
-import qualified Data.ByteString.Internal as BStrInternal
+import qualified Data.ByteString.Internal
 import Data.Word
 import Foreign.C.String
 import Foreign.C.Types
@@ -62,5 +62,4 @@ disassemble ctxRef mcodeStr =
                 else pure $ reverse acc
         parse 0 []
   where
-    mcodePtr = mcodeBufPtr `plusForeignPtr` mcodeOffset
-    (mcodeBufPtr, mcodeOffset, mcodeLen) = BStrInternal.toForeignPtr mcodeStr
+    (mcodePtr, mcodeLen) = Data.ByteString.Internal.toForeignPtr0 mcodeStr
