@@ -15,10 +15,10 @@ printCfg kernel = B.hPutBuilder stdout . formatCfg kernel
 formatCfg :: DisassembledKernel -> CFG -> B.Builder
 formatCfg kernel (CFG bbs) = mconcat $ putBb <$> zip [0 ..] bbs
   where
-    putBb (bbIdx, BasicBlock {bbInstructions = insts, bbEntries = predIdxs, bbExit = exit}) =
+    putBb (bbIdx, BasicBlock {bbInstructions = insts, bbEntries = entryIdxs, bbExit = exit}) =
       putBbLabel bbIdx
         <> ":\t /* predecessors: "
-        <> strJoin ", " (putBbLabel <$> predIdxs)
+        <> putBbEntries entryIdxs
         <> ", exit: "
         <> putBbExit exit
         <> " */\n"
@@ -35,6 +35,8 @@ formatCfg kernel (CFG bbs) = mconcat $ putBb <$> zip [0 ..] bbs
           | otherwise =
             acc <> putInstruction pc i (BStr.length (disasmInstructionsBin kernel) - pc)
         putInstructions [] acc = acc
+        putBbEntries [] = "none (program start)"
+        putBbEntries e = strJoin ", " (putBbLabel <$> e)
         putBbExit (BbExitCondJump bb1 bb2) = "conditional jump to bb" <> B.intDec bb1 <> " or bb" <> B.intDec bb2
         putBbExit (BbExitJump bb1) = "jump to bb" <> B.intDec bb1
         putBbExit (BbExitFallThrough bb1) = "bb" <> B.intDec bb1

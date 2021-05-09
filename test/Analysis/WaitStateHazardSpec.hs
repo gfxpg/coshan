@@ -4,7 +4,6 @@ module Analysis.WaitStateHazardSpec where
 
 import Control.Monad (forM_)
 import Coshan.Analysis.WaitStateHazard
-import Coshan.Disassembler
 import Coshan.Reporting
 import Data.String.Interpolate (i)
 import Helpers
@@ -25,11 +24,11 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
             "v_writelane_b32" -> "v_writelane_b32 v0, 1, s3" :: String}
         |]
       checkWaitStateHazards kernel cfg
-        `shouldBe` [ LogMessage 12 $
-                       InstructionRequired
-                         { instreqInstruction = Instruction ["s", "nop"] [OConst 0],
-                           instreqBacktrace = [(0, Nothing), (8, Nothing)],
-                           instreqExplanation = "A v_readlane/v_writelane instruction with an SGPR lane selector requires 4 wait states after the selector has been modified by a VALU instruction."
+        `shouldBe` [ Error 12 $
+                       WaitStatesRequired
+                         { wsreqMissingWaitStates = 1,
+                           wsreqBacktrace = [8, 0],
+                           wsreqExplanation = "A v_readlane/v_writelane instruction with an SGPR lane selector requires 4 wait states after the selector has been modified by a VALU instruction."
                          }
                    ]
 
@@ -51,11 +50,11 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
             "v_writelane_b32" -> "v_writelane_b32 v0, 1, s3" :: String}
         |]
       checkWaitStateHazards kernel cfg
-        `shouldBe` [ LogMessage 28 $
-                       InstructionRequired
-                         { instreqInstruction = Instruction ["s", "nop"] [OConst 1],
-                           instreqBacktrace = [(0, Nothing), (8, Nothing), (12, Nothing)],
-                           instreqExplanation = "A v_readlane/v_writelane instruction with an SGPR lane selector requires 4 wait states after the selector has been modified by a VALU instruction."
+        `shouldBe` [ Error 28 $
+                       WaitStatesRequired
+                         { wsreqMissingWaitStates = 2,
+                           wsreqBacktrace = [12, 8, 0],
+                           wsreqExplanation = "A v_readlane/v_writelane instruction with an SGPR lane selector requires 4 wait states after the selector has been modified by a VALU instruction."
                          }
                    ]
 
@@ -79,11 +78,11 @@ spec = describe "v_{read,write}lane with sgpr selector modified by valu op hazar
           s_endpgm
         |]
       checkWaitStateHazards kernel cfg
-        `shouldBe` [ LogMessage 8 $
-                       InstructionRequired
-                         { instreqInstruction = Instruction ["s", "nop"] [OConst 2],
-                           instreqBacktrace = [(20, Nothing), (28, Nothing)],
-                           instreqExplanation = "A v_readlane/v_writelane instruction with an SGPR lane selector requires 4 wait states after the selector has been modified by a VALU instruction."
+        `shouldBe` [ Error 8 $
+                       WaitStatesRequired
+                         { wsreqMissingWaitStates = 3,
+                           wsreqBacktrace = [28, 20],
+                           wsreqExplanation = "A v_readlane/v_writelane instruction with an SGPR lane selector requires 4 wait states after the selector has been modified by a VALU instruction."
                          }
                    ]
 

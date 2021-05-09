@@ -9,7 +9,7 @@ import Text.PrettyPrint.ANSI.Leijen ((<+>))
 import qualified Text.PrettyPrint.ANSI.Leijen as P
 import Text.Printf (printf)
 
-printAnalysisReport :: DisassembledKernel -> [(String, [R.LogMessage])] -> IO ()
+printAnalysisReport :: DisassembledKernel -> [(String, [R.Error])] -> IO ()
 printAnalysisReport kernel = P.putDoc . (<> P.hardline) . catWithBreak . (printReport kernel <$>)
 
 putBreak :: P.Doc
@@ -18,7 +18,7 @@ putBreak = P.hardline <> P.hardline
 catWithBreak :: [P.Doc] -> P.Doc
 catWithBreak = mconcat . intersperse putBreak
 
-printReport :: DisassembledKernel -> (String, [R.LogMessage]) -> P.Doc
+printReport :: DisassembledKernel -> (String, [R.Error]) -> P.Doc
 printReport _ (analyzer, []) = P.bold (P.green "[ OK ]" <+> P.text analyzer)
 printReport kernel (analyzer, errors) = catWithBreak (putMessage <$> zip [1 ..] errors)
   where
@@ -26,44 +26,48 @@ printReport kernel (analyzer, errors) = catWithBreak (putMessage <$> zip [1 ..] 
       let header = P.bold (P.red ("[ " <> P.int i <> "/" <> P.int (length errors) <> " ]") <+> P.text analyzer)
        in P.vcat [header, putError kernel e]
 
-putError :: DisassembledKernel -> R.LogMessage -> P.Doc
-putError kernel (R.LogMessage pc error) = case error of
-  R.InstructionRequired {R.instreqInstruction = i, R.instreqBacktrace = bt, R.instreqExplanation = expl} ->
-    P.vcat
-      [ P.bold "Problem:" <+> "Missing instruction" <+> (P.bold . P.magenta . putInstruction) i,
-        P.bold "Explanation:" <+> P.text expl,
-        P.bold "Location:",
-        putTrace kernel (pc, Nothing),
-        P.bold "Backtrace:",
-        (catWithBreak . (putTrace kernel <$>)) bt
-      ]
-  R.CounterWaitRequired {R.ctrreqWaitClause = clause, R.ctrreqSucceedingEvents = succ, R.ctrreqPrecedingEvents = pred, R.ctrreqExplanation = expl} ->
+putError :: DisassembledKernel -> R.Error -> P.Doc
+putError kernel (R.Error pc error) = case error of
+  R.WaitStatesRequired {R.wsreqMissingWaitStates = waits, R.wsreqBacktrace = bt, R.wsreqExplanation = expl} ->
+    let countSuffix = if waits == 1 then "" else "s"
+     in P.vcat
+          [ P.bold "Problem:" <+> "Missing" <+> P.int waits <+> "wait state" <> countSuffix,
+            P.bold "Explanation:" <+> P.text expl,
+            P.bold "Resolution:" <+> "Insert" <+> P.int waits <+> "independent operation" <> countSuffix <+> "or"
+              <+> (P.bold . P.magenta . putInstruction $ Instruction ["s", "nop"] [OConst (waits - 1)])
+              <+> "between dependent instructions",
+            P.bold "Location:",
+            putTrace kernel pc,
+            P.bold "Backtrace:",
+            (catWithBreak . (putTrace kernel <$>)) bt
+          ]
+  R.CounterWaitRequired {R.ctrreqWaitcntClause = clause, R.ctrreqSucceedingEvents = succ, R.ctrreqPrecedingEvents = pred, R.ctrreqExplanation = expl} ->
     P.vcat $
       [ P.bold "Problem:" <+> "Missing" <+> (P.bold . P.magenta . putInstruction) (Instruction ["s", "waitcnt"] [clause]),
         P.bold "Explanation:" <+> P.text expl,
         P.bold "Location:",
-        putTrace kernel (pc, Nothing)
+        putTrace kernel pc
       ]
         ++ ( case succ of
                [] -> []
-               ops -> [P.bold "Newer unwaited operations in the queue:", (catWithBreak . (putTrace kernel <$>)) ops]
+               ops -> [P.bold "Newer unwaited operations in the queue:", (catWithBreak . (putTrace kernel . fst <$>)) ops]
            )
         ++ ( case pred of
-               [op] ->
+               [(opPc, _)] ->
                  [ P.bold "Memory operation:",
-                   putTrace kernel op
+                   putTrace kernel opPc
                  ]
-               op : pred ->
+               (opPc, _) : pred ->
                  [ P.bold "Memory operation:",
-                   putTrace kernel op,
+                   putTrace kernel opPc,
                    P.bold "Earlier unwaited operations in the queue:",
-                   (catWithBreak . (putTrace kernel <$>)) pred
+                   (catWithBreak . (putTrace kernel . fst <$>)) pred
                  ]
                _ -> []
            )
 
-putTrace :: DisassembledKernel -> (PC, a) -> P.Doc
-putTrace kernel (pc, _) = P.vcat (putInstW <$> window)
+putTrace :: DisassembledKernel -> PC -> P.Doc
+putTrace kernel pc = P.vcat (putInstW <$> window)
   where
     window = instructionWindow (disasmInstructions kernel) pc
     putInstW (instPc, i) =
@@ -79,7 +83,7 @@ instructionWindow instructions pc = case instructions of
   _ -> error $ "Instruction " <> show pc <> " not found"
 
 putInstruction :: Instruction -> P.Doc
-putInstruction (Instruction opparts ops) = opcode <+> foldr ((<+>) . putOperand) "" ops
+putInstruction (Instruction opparts ops) = opcode <> foldr (flip (<+>) . putOperand) "" ops
   where
     opcode = P.text $ BC8.unpack $ BC8.intercalate "_" opparts
     putOperand o = case o of

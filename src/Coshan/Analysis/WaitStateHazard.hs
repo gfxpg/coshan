@@ -8,7 +8,7 @@ import Coshan.Disassembler
 import qualified Coshan.Reporting as R
 import Data.Foldable (foldl')
 
-checkWaitStateHazards :: DisassembledKernel -> CFG -> [R.LogMessage]
+checkWaitStateHazards :: DisassembledKernel -> CFG -> [R.Error]
 checkWaitStateHazards _ (CFG bbs) = go [] bbs
   where
     go log [] = log
@@ -17,7 +17,7 @@ checkWaitStateHazards _ (CFG bbs) = go [] bbs
 data WaitStatesIterCtx = WaitStatesIterCtx
   { reverseBbInsts :: [(PC, Instruction)], -- instructions we walk over on this iteration
     predBbIdxs :: [BasicBlockIdx], -- predecessors of the current basic block
-    walkedInsts :: [(PC, Instruction)], -- all instructions we walked to reach this point (for better messages in logs)
+    walkedInsts :: [PC], -- all instructions we walked to reach this point (for better messages in logs)
     walkedBbIdxs :: [BasicBlockIdx] -- indexes of all basic blocks we visited (to avoid processing the same blocks in loops)
   }
 
@@ -41,7 +41,7 @@ rwLaneHazardMatcher = \case
         )
   _ -> Nothing
 
-analyzeBb :: CFG -> BasicBlock -> [HazardMatcher] -> [R.LogMessage]
+analyzeBb :: CFG -> BasicBlock -> [HazardMatcher] -> [R.Error]
 analyzeBb (CFG bbs) currBb matchers = analyzeInstructions ([], bbInstructions currBb) []
   where
     analyzeInstructions (_, []) log = log
@@ -52,23 +52,23 @@ analyzeBb (CFG bbs) currBb matchers = analyzeInstructions ([], bbInstructions cu
           Just (msg, ws, dp)
             | iterCtx <- WaitStatesIterCtx {reverseBbInsts = prev, predBbIdxs = bbEntries currBb, walkedInsts = [], walkedBbIdxs = []},
               Just (WaitStates missingWs, path) <- missingWaitStatesPath ws dp iterCtx ->
-              let error =
-                    R.InstructionRequired
-                      { R.instreqInstruction = Instruction ["s", "nop"] [OConst $ missingWs - 1],
-                        R.instreqBacktrace = (,Nothing) . fst <$> path,
-                        R.instreqExplanation = msg
-                      }
-               in Just $ R.LogMessage pc error
+              Just $
+                R.Error pc $
+                  R.WaitStatesRequired
+                    { R.wsreqMissingWaitStates = missingWs,
+                      R.wsreqBacktrace = reverse path,
+                      R.wsreqExplanation = msg
+                    }
           _ -> Nothing
-    missingWaitStatesPath :: WaitStates -> DependeeMatcher -> WaitStatesIterCtx -> Maybe (WaitStates, [(PC, Instruction)]) -- path to the instruction with missing wait states
+    missingWaitStatesPath :: WaitStates -> DependeeMatcher -> WaitStatesIterCtx -> Maybe (WaitStates, [PC]) -- path to the instruction with missing wait states
     missingWaitStatesPath (WaitStates ws) _ _ | ws <= 0 = Nothing
     missingWaitStatesPath (WaitStates ws) dependsOn ctx@WaitStatesIterCtx {reverseBbInsts = ((pc, i) : prevInstsInBb)}
-      | dependsOn i = Just (WaitStates ws, (pc, i) : walkedInsts ctx)
+      | dependsOn i = Just (WaitStates ws, pc : walkedInsts ctx)
       | otherwise =
         let states = case i of
               Instruction ["s", "nop"] [OConst states] -> 1 + states
               _ -> 1
-         in missingWaitStatesPath (WaitStates $ ws - states) dependsOn ctx {reverseBbInsts = prevInstsInBb, walkedInsts = (pc, i) : walkedInsts ctx}
+         in missingWaitStatesPath (WaitStates $ ws - states) dependsOn ctx {reverseBbInsts = prevInstsInBb, walkedInsts = pc : walkedInsts ctx}
     missingWaitStatesPath ws m ctx@WaitStatesIterCtx {reverseBbInsts = [], predBbIdxs = bbIdxs} =
       msum $ walkBb <$> bbIdxs
       where

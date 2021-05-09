@@ -22,9 +22,9 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
           v_add_f32 v1, v1, 1.0                                // PC = 28, shouldn't produce an error because v1 is overwritten
         |]
     checkWaitcnts kernel cfg
-      `shouldBe` [ LogMessage 16 $
+      `shouldBe` [ Error 16 $
                      CounterWaitRequired
-                       { ctrreqWaitClause = Ovmcnt 1,
+                       { ctrreqWaitcntClause = Ovmcnt 1,
                          ctrreqSucceedingEvents = [(8, "(0) vmem access: v4, v5, v6, v7")],
                          ctrreqPrecedingEvents = [(0, "(1) vmem access: v0, v1, v2, v3")],
                          ctrreqExplanation = "Source register v2 is read from memory. The operation is complete when the counter reaches 1 because there is one operation enqueued after it."
@@ -47,30 +47,30 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
           buffer_store_dword v3, off, s[8:11], 0 offset:8  // PC = 68
         |]
     checkWaitcnts kernel cfg
-      `shouldBe` [ LogMessage 24 $
+      `shouldBe` [ Error 24 $
                      CounterWaitRequired
-                       { ctrreqWaitClause = Olgkmcnt 0,
+                       { ctrreqWaitcntClause = Olgkmcnt 0,
                          ctrreqSucceedingEvents = [(8, "(0) scalar read (returned out-of-order): s8, s9, s10, s11")],
                          ctrreqPrecedingEvents = [(0, "(1) scalar read (returned out-of-order): s0")],
                          ctrreqExplanation = "Source register s0 is read from memory. The operation is complete only when the counter reaches 0 because there are out-of-order operations enqueued."
                        },
-                   LogMessage 52 $
+                   Error 52 $
                      CounterWaitRequired
-                       { ctrreqWaitClause = Olgkmcnt 0,
+                       { ctrreqWaitcntClause = Olgkmcnt 0,
                          ctrreqSucceedingEvents = [(44, "(0) lds access: v3"), (32, "(1) lds access: v1, v2")],
                          ctrreqPrecedingEvents = [(8, "(2) scalar read (returned out-of-order): s8, s9, s10, s11"), (0, "(3) scalar read (returned out-of-order)")],
                          ctrreqExplanation = "Source registers s8, s9, s10, s11 are read from memory. The operation is complete only when the counter reaches 0 because there are out-of-order operations enqueued."
                        },
-                   LogMessage 52 $
+                   Error 52 $
                      CounterWaitRequired
-                       { ctrreqWaitClause = Olgkmcnt 0,
+                       { ctrreqWaitcntClause = Olgkmcnt 0,
                          ctrreqSucceedingEvents = [(44, "(0) lds access: v3")],
                          ctrreqPrecedingEvents = [(32, "(1) lds access: v1, v2"), (8, "(2) scalar read (returned out-of-order): s8, s9, s10, s11"), (0, "(3) scalar read (returned out-of-order)")],
                          ctrreqExplanation = "Source register v1 is read from memory. The operation is complete only when the counter reaches 0 because there are out-of-order operations enqueued."
                        },
-                   LogMessage 68 $
+                   Error 68 $
                      CounterWaitRequired
-                       { ctrreqWaitClause = Olgkmcnt 0,
+                       { ctrreqWaitcntClause = Olgkmcnt 0,
                          ctrreqSucceedingEvents = [],
                          ctrreqPrecedingEvents = [(44, "(0) lds access: v3"), (32, "(1) lds access"), (8, "(2) scalar read (returned out-of-order)"), (0, "(3) scalar read (returned out-of-order)")],
                          ctrreqExplanation = "Source register v3 is read from memory. The operation is complete only when the counter reaches 0 because there are out-of-order operations enqueued."
@@ -91,16 +91,16 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
           v_add_f32 v0, v0, v4                                 // PC = 48
         |]
     checkWaitcnts kernel cfg
-      `shouldBe` [ LogMessage 28 $
+      `shouldBe` [ Error 28 $
                      CounterWaitRequired
-                       { ctrreqWaitClause = Ovmcnt 0,
+                       { ctrreqWaitcntClause = Ovmcnt 0,
                          ctrreqSucceedingEvents = [],
                          ctrreqPrecedingEvents = [(8, "(0) vmem access: v4, v5, v6, v7")],
                          ctrreqExplanation = "Source register v4 is read from memory. The operation is complete when the counter reaches 0 because there are 0 operations enqueued after it."
                        },
-                   LogMessage 48 $
+                   Error 48 $
                      CounterWaitRequired
-                       { ctrreqWaitClause = Olgkmcnt 0,
+                       { ctrreqWaitcntClause = Olgkmcnt 0,
                          ctrreqSucceedingEvents = [],
                          ctrreqPrecedingEvents = [(28, "(0) lds access: v4")],
                          ctrreqExplanation = "Source register v4 is read from memory. The operation is complete when the counter reaches 0 because there are 0 operations enqueued after it."
@@ -148,16 +148,16 @@ spec = describe "memory requests dependency resolution using s_waitcnt" $ do
             s_branch bb48                      // PC = 84
       |]
     checkWaitcnts kernel cfg
-      `shouldBe` [ LogMessage 16 $
+      `shouldBe` [ Error 16 $
                      CounterWaitRequired
-                       { ctrreqWaitClause = Ovmcnt 0,
+                       { ctrreqWaitcntClause = Ovmcnt 0,
                          ctrreqSucceedingEvents = [],
                          ctrreqPrecedingEvents = [(0, "(0) vmem access: v0")],
                          ctrreqExplanation = "Source register v0 is read from memory. The operation is complete when the counter reaches 0 because there are 0 operations enqueued after it."
                        },
-                   LogMessage 56 $
+                   Error 56 $
                      CounterWaitRequired
-                       { ctrreqWaitClause = Ovmcnt 1,
+                       { ctrreqWaitcntClause = Ovmcnt 1,
                          ctrreqSucceedingEvents = [(40, "(0) vmem access: v4, v5")],
                          ctrreqPrecedingEvents = [(32, "(1) vmem access: v0, v1"), (40, "(2) vmem access: v4, v5"), (32, "(3) vmem access"), (0, "(4) vmem access")],
                          ctrreqExplanation = "Source register v1 is read from memory. The operation is complete when the counter reaches 1 because there is one operation enqueued after it."

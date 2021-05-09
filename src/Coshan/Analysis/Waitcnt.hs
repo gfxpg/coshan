@@ -12,7 +12,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Debug.Trace
 
-checkWaitcnts :: DisassembledKernel -> CFG -> [R.LogMessage]
+checkWaitcnts :: DisassembledKernel -> CFG -> [R.Error]
 checkWaitcnts _ cfg = Map.foldrWithKey' printMessage [] logMap
   where
     emptyCtx = IterCtx {ctxVisitedOutEvents = Map.empty, ctxLog = Map.empty, ctxNesting = 0}
@@ -23,14 +23,14 @@ checkWaitcnts _ cfg = Map.foldrWithKey' printMessage [] logMap
           explRegs = case locGprs loc of
             [r] -> "register " ++ show r ++ " is"
             rs -> "registers " ++ intercalate ", " (show <$> rs) ++ " are"
-          error =
+          violation =
             R.CounterWaitRequired
-              { R.ctrreqWaitClause = waitctr,
+              { R.ctrreqWaitcntClause = waitctr,
                 R.ctrreqSucceedingEvents = traceEvent <$> zip [(0 :: Int) ..] (locQueueSucc loc),
                 R.ctrreqPrecedingEvents = traceEvent <$> zip [(length $ locQueueSucc loc) ..] (locQueuePred loc),
                 R.ctrreqExplanation = "Source " ++ explRegs ++ " read from memory. " ++ explanation
               }
-       in R.LogMessage (locGprUsedAt loc) error : log
+       in R.Error (locGprUsedAt loc) violation : log
 
 data Gpr = Sgpr Int | Vgpr Int
   deriving (Eq, Ord)
