@@ -9,8 +9,8 @@ spec :: Spec
 spec = describe "elf reader" $ do
   it "extracts all kernels from code object V3" $ do
     elf <-
-      compileCo $ CodeObject {coCpu = "gfx900", coMetadataV3 = True, coKernels = [("test_kernel_a", "v_nop\ns_endpgm"), ("test_kernel_b", "s_endpgm")]}
-    kernels <- readElf (DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"}) elf
+      compileCo $ CodeObject {coCpu = "gfx900", coMetadataVersion = 3, coKernels = [("test_kernel_a", "v_nop\ns_endpgm"), ("test_kernel_b", "s_endpgm")]}
+    Right kernels <- readElf (DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"}) elf
     length kernels `shouldBe` 2
     disasmKernelName (head kernels) `shouldBe` "test_kernel_a"
     disasmKernelName (kernels !! 1) `shouldBe` "test_kernel_b"
@@ -20,7 +20,7 @@ spec = describe "elf reader" $ do
 
   it "extracts all kernels from code object V2" $ do
     elf <- BStr.readFile "test/Disassembler/Cases/kernels.hsaco"
-    kernels <- readElf (DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"}) elf
+    Right kernels <- readElf (DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = "gfx900"}) elf
     length kernels `shouldBe` 2
     disasmKernelName (head kernels) `shouldBe` "_Z10cond_writePfPKff"
     disasmInstructions (head kernels)

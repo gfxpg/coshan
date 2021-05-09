@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE LambdaCase #-}
 {-# OPTIONS_GHC -fno-cse #-}
 
 module Main where
@@ -43,12 +44,11 @@ main = do
   let nopLocations = fst . head . readHex <$> optNops args
 
   co <- B.readFile (optCo args)
-  kernels <- readElf target co
-
-  let kernel =
-        case kernels of
-          firstKernel : _ -> insertNops nopLocations firstKernel
-          _ -> error $ "No kernels found in " ++ optCo args
+  kernel <-
+    readElf target co >>= \case
+      Right (firstKernel : _) -> return $ insertNops nopLocations firstKernel
+      Right [] -> error $ "No kernels found in " ++ optCo args
+      Left (DisasmInvalidInstruction kernel pc) -> error $ "Unable to read the instruction at PC = " ++ show pc ++ " in kernel " ++ show (disasmKernelName kernel)
 
   let instructions = second parseInstruction <$> disasmInstructions kernel
   let cfg = buildCfg instructions

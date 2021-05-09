@@ -9,13 +9,16 @@ import qualified Data.ByteString.Char8 as BC8
 import qualified Data.Elf as E
 import Data.List (find)
 
-readElf :: DisasmTarget -> ByteString -> IO [DisassembledKernel]
+readElf :: DisasmTarget -> ByteString -> IO (Either DisassemblyError [DisassembledKernel])
 readElf target bin = do
   llvm <- getLlvmRef target
-  forM kernels $ \k -> do
-    dasm <- disassemble llvm (disasmInstructionsBin k)
-    pure $ k {disasmInstructions = dasm}
+  sequence <$> forM kernels (disassembleKernel llvm)
   where
+    disassembleKernel llvm k = do
+      dasm <- disassemble llvm (disasmInstructionsBin k)
+      case dasm of
+        Right instructions -> return $ Right $ k {disasmInstructions = instructions}
+        Left errorPc -> return $ Left $ DisasmInvalidInstruction k errorPc
     kernels = findKernels textSection globalSymbols
     Just textSection = find ((== ".text") . E.elfSectionName) $ E.elfSections elf
     globalSymbols = head $ E.parseSymbolTables elf

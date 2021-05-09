@@ -13,7 +13,7 @@ spec :: Spec
 spec = describe "cfg construction" $ do
   it "recognizes scalar branching, including loops" $ do
     (cfg, _) <-
-      loadFirstKernel . gfx900Kernel "cfg_simple_loop" $
+      loadFirstKernel . gfx908Kernel "cfg_simple_loop" $
         [i|
           s_load_dwordx2 s[0:1], s[4:5], 0x0
           s_waitcnt lgkmcnt(0)
@@ -97,7 +97,7 @@ spec = describe "cfg construction" $ do
         ]
   it "recognizes function calls that use s_call_b64" $ do
     (cfg, _) <-
-      loadFirstKernel . gfx900Kernel "cfg_s_call" $
+      loadFirstKernel . gfx908Kernel "cfg_s_call" $
         [i|
           bb0:
           s_load_dwordx2 s[0:1], s[4:5], 0x0

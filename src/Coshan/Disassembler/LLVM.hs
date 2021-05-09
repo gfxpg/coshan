@@ -9,8 +9,8 @@ import qualified Data.ByteString.Internal
 import Data.Word
 import Foreign.C.String
 import Foreign.C.Types
-import Foreign.Marshal.Alloc
 import Foreign.ForeignPtr
+import Foreign.Marshal.Alloc
 import Foreign.Ptr
 
 type LLVMDisasmContextRef = ForeignPtr ()
@@ -47,22 +47,23 @@ getLlvmRef target = do
       ctxRefRaw <- llvmCreateDisasmCPU tripleStr cpuStr nullPtr 0 nullPtr nullPtr
       newForeignPtr llvmDisasmDispose ctxRefRaw
 
-disassemble :: LLVMDisasmContextRef -> ByteString -> IO [(PC, ByteString)]
+-- When an invalid instruction is encountered, Left (command address) is returned.
+disassemble :: LLVMDisasmContextRef -> ByteString -> IO (Either PC [(PC, ByteString)])
 disassemble ctxRef mcodeStr =
   withForeignPtr mcodePtr $ \mcode ->
     withForeignPtr ctxRef $ \ctx -> do
       allocaBytes 256 $ \outbuf -> do
-        let disasmInstruction = \pos -> do
-              posInc <- llvmDisasmInstruction ctx (mcode `plusPtr` pos) (fromIntegral $ mcodeLen - pos) 0 outbuf (CSize 256)
-              let instStrWithoutLeadingTab = castPtr $ outbuf `plusPtr` 1
-              instStr <- BC8.packCString instStrWithoutLeadingTab
-              pure (pos + fromIntegral posInc, instStr)
-        let parse = \pos acc ->
-              if pos < mcodeLen
-                then
-                  disasmInstruction pos >>= \(nextPos, inst) ->
-                    parse nextPos ((fromIntegral pos, inst) : acc)
-                else pure $ reverse acc
+        let parse pc acc
+              | pc >= mcodeLen = return $ Right $ reverse acc
+              | otherwise = do
+                instLen <- llvmDisasmInstruction ctx (mcode `plusPtr` pc) (fromIntegral $ mcodeLen - pc) 0 outbuf (CSize 256)
+                case instLen of
+                  0 -> return $ Left pc
+                  _ -> do
+                    let nextPc = pc + fromIntegral instLen
+                        instructionWithoutLeadingTab = castPtr $ outbuf `plusPtr` 1
+                    instruction <- BC8.packCString instructionWithoutLeadingTab
+                    parse nextPc ((fromIntegral pc, instruction) : acc)
         parse 0 []
   where
     (mcodePtr, mcodeLen) = Data.ByteString.Internal.toForeignPtr0 mcodeStr

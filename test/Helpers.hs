@@ -13,28 +13,38 @@ import Data.Digest.Pure.MD5 (md5)
 import Data.List (intercalate)
 import Data.String.Interpolate (i)
 import Data.Tuple.Strict (mapSnd)
-import System.Directory (doesFileExist, getCurrentDirectory)
+import System.Directory (createDirectory, doesDirectoryExist, doesFileExist, getCurrentDirectory)
 import System.Exit (ExitCode (..))
 import System.Process (readProcessWithExitCode)
 
-data CodeObject = CodeObject {coCpu :: String, coMetadataV3 :: Bool, coKernels :: [(String, ByteString)]}
+data CodeObject = CodeObject {coCpu :: String, coMetadataVersion :: Int, coKernels :: [(String, ByteString)]}
 
-gfx900Kernel :: String -> ByteString -> CodeObject
-gfx900Kernel name text = CodeObject {coCpu = "gfx900", coMetadataV3 = False, coKernels = [(name, text)]}
+gfx908Kernel :: String -> ByteString -> CodeObject
+gfx908Kernel name text = CodeObject {coCpu = "gfx908", coMetadataVersion = 3, coKernels = [(name, text)]}
+
+extractFirstKernel :: CodeObject -> IO DisassembledKernel
+extractFirstKernel co = do
+  elf <- compileCo co
+  elfContents <- readElf DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = coCpu co} elf
+  case elfContents of
+    Left (DisasmInvalidInstruction k pc) -> error $ "Unable to disassemble " <> show (disasmKernelName k) <> ": invalid instruction at PC = " <> show pc
+    Right (firstKernel : _) -> return firstKernel
 
 loadFirstKernel :: CodeObject -> IO (CFG, DisassembledKernel)
 loadFirstKernel co = do
-  elf <- compileCo co
-  kernel <- head <$> readElf DisasmTarget {disasmTriple = "amdgcn--amdhsa", disasmCPU = coCpu co} elf
+  kernel <- extractFirstKernel co
   let instructions = mapSnd parseInstruction <$> disasmInstructions kernel
-      cfg = buildCfg instructions
-   in pure (cfg, kernel)
+  return (buildCfg instructions, kernel)
 
 rocmImage :: String
-rocmImage = "rocm/rocm-terminal:4.0"
+rocmImage = "rocm/rocm-terminal:4.1.1"
 
 getTmpDir :: IO String
-getTmpDir = (++ "/.test_tmp") <$> getCurrentDirectory
+getTmpDir = do
+  path <- (++ "/.test_tmp") <$> getCurrentDirectory
+  exists <- doesDirectoryExist path
+  unless exists $ createDirectory path
+  return path
 
 compileCo :: CodeObject -> IO ByteString
 compileCo co = do
@@ -47,11 +57,21 @@ compileCo co = do
   alreadyCompiled <- doesFileExist (tmpDir ++ "/" ++ outputS) `andLazy` doesFileExist (tmpDir ++ "/" ++ outputCo)
   unless alreadyCompiled $ do
     BLC8.writeFile (tmpDir ++ "/" ++ outputS) source
-    let podmanCmd = ["run", "--user=root", "-v", tmpDir ++ ":/out:z", "-w=/out", rocmImage]
-    let metadataFlag = if coMetadataV3 co then "-mcode-object-v3" else "-mno-code-object-v3"
-    let hipccCmd = ["/opt/rocm/llvm/bin/clang", "-x", "assembler", "-target", "amdgcn--amdhsa", "-mcpu=" ++ coCpu co, metadataFlag, "-o", outputCo, outputS]
-    (code, sout, serr) <- readProcessWithExitCode "podman" (podmanCmd ++ hipccCmd) ""
-    let fullCmdString = unwords ("podman" : podmanCmd ++ hipccCmd)
+    let dockerCmd = ["run", "--user=root", "-v", tmpDir ++ ":/out:z", "-w=/out", rocmImage]
+    let ccCmd =
+          [ "/opt/rocm/llvm/bin/clang",
+            "-x",
+            "assembler",
+            "-target",
+            "amdgcn--amdhsa",
+            "-mcpu=" ++ coCpu co,
+            "-mcode-object-version=" ++ show (coMetadataVersion co),
+            "-o",
+            outputCo,
+            outputS
+          ]
+    (code, sout, serr) <- readProcessWithExitCode "docker" (dockerCmd ++ ccCmd) ""
+    let fullCmdString = unwords ("docker" : dockerCmd ++ ccCmd)
     when (sout /= "") $ putStrLn ("[stdout] " ++ fullCmdString ++ "\n" ++ sout)
     when (serr /= "") $ putStrLn ("[stderr] " ++ fullCmdString ++ "\n" ++ serr)
     when (code /= ExitSuccess) $ fail ("Failed to compile code object " ++ kernelNames)
@@ -60,7 +80,7 @@ compileCo co = do
 getCoListing :: CodeObject -> BLC8.ByteString
 getCoListing co = BLC8.intercalate "\n" sources
   where
-    sources = (if coMetadataV3 co then kernelV3 else kernelV2) <$> coKernels co
+    sources = (if coMetadataVersion co == 3 then kernelV3 else kernelV2) <$> coKernels co
     kernelV2 :: (String, ByteString) -> BLC8.ByteString
     kernelV2 (kernelName, kernelText) =
       [i|

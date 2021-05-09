@@ -34,3 +34,5 @@ data DisasmTarget = DisasmTarget
   }
 
 type PC = Int
+
+data DisassemblyError = DisasmInvalidInstruction DisassembledKernel PC
