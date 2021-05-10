@@ -15,7 +15,7 @@ import Debug.Trace
 checkWaitcnts :: DisassembledKernel -> CFG -> [R.Error]
 checkWaitcnts _ cfg = Map.foldrWithKey' printMessage [] logMap
   where
-    emptyCtx = IterCtx {ctxVisitedOutEvents = Map.empty, ctxLog = Map.empty, ctxNesting = 0}
+    emptyCtx = IterCtx {ctxVisitedOutEvents = Map.empty, ctxLog = Map.empty}
     logMap = ctxLog $ foldlWithSuccessors' analyzeBb emptyCtx [] 0 cfg
     printMessage loc (waitctr, explanation) log =
       let traceEvent (i, (pc, [], etype)) = (pc, "(" ++ show i ++ ")" ++ " " ++ show etype)
@@ -56,7 +56,7 @@ instance Ord WaitcntLocation where
 
 type Log = Map WaitcntLocation (Operand, String)
 
-data IterCtx = IterCtx {ctxVisitedOutEvents :: !(Map BasicBlockIdx (Set PendingEvents)), ctxLog :: !Log, ctxNesting :: Int}
+data IterCtx = IterCtx {ctxVisitedOutEvents :: !(Map BasicBlockIdx (Set PendingEvents)), ctxLog :: !Log}
 
 type PendingEvents = [(PC, [Gpr], MemEvent)]
 
@@ -91,9 +91,9 @@ checkPendingEvents checkPc (pevents, log) checkGprs =
   {-trace ("CHK PC" ++ show checkPc ++ show checkGprs ++ ", pevents: " ++ show pevents ++ ", out: " ++ show (pevents', log')) $-} (pevents', log')
   where
     pendingEvents = filter (\(_, gprs, _) -> not $ null $ checkGprs `intersect` gprs) pevents
-    log' = foldl' logGprUsageWithPendingEvent log pendingEvents
-    pevents' = (\e@(pc, _, etype) -> if e `elem` pendingEvents then (pc, [], etype) else e) <$> pevents
-    logGprUsageWithPendingEvent log (epc, egprs, etype) = Map.insert location (counterForEvent, explanation) log
+    (missingWaits, log') = foldl' logGprUsageWithPendingEvent ([], log) pendingEvents
+    pevents' = updateEventsOnWaitcnt missingWaits pevents
+    logGprUsageWithPendingEvent (waitcnt, log) (epc, egprs, etype) = (counterForEvent : waitcnt, Map.insert location (counterForEvent, explanation) log)
       where
         pendingGprs = checkGprs `intersect` egprs
         location = WaitcntLocation {locGprs = pendingGprs, locGprUsedAt = checkPc, locQueueSucc = succEvents, locQueuePred = currAndPrecedingEvents}
@@ -128,7 +128,7 @@ updateEventsOnWaitcnt waitops pevents = foldl' updateOutstanding pevents (opToEv
         dropEvent e (q, 0) = (e : q, 0)
         dropEvent e@(_, _, ty) (q, toDrop)
           | ty == eType = (q, toDrop - 1)
-          | otherwise =  (e : q, toDrop)
+          | otherwise = (e : q, toDrop)
     opToEvents (Ovmcnt c) = [(EventVMem, c)]
     opToEvents (Olgkmcnt c) = [(EventSLoad, c), (EventLDS, c)]
     opToEvents (Oexpcnt _) = []
