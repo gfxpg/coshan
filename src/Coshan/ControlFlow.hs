@@ -48,20 +48,27 @@ fillPredecessors blockLeaders branches blocks = blocks'
           BbExitCondJump succBbIdx1 succBbbIdx2 -> Map.insertWith (++) succBbIdx1 [bbIdx] $ Map.insertWith (++) succBbbIdx2 [bbIdx] acc
           _ -> acc
     followCallToReturnPcs :: SgprPair -> PC -> [PC]
-    followCallToReturnPcs callGprs currentPc
-      | Just closestBranch <- Map.lookupGE currentPc branches = case closestBranch of
-        (retPc, BbExitDynamic retGprs)
-          | retGprs == callGprs ->
-            [retPc]
-        (_, BbExitCondJump brTargetPc1 brTargetPc2) ->
-          nub $ followCallToReturnPcs callGprs =<< [brTargetPc1, brTargetPc2]
-        (_, BbExitJump brTargetPc) ->
-          followCallToReturnPcs callGprs brTargetPc
-        (_, BbExitTerminal) ->
-          []
-        (otherBrPc, _) ->
-          followCallToReturnPcs callGprs (otherBrPc + 4)
-      | otherwise = []
+    followCallToReturnPcs callGprs = nub . snd . go Set.empty
+      where
+        go visitedBranches pc
+          | not (pc `Set.member` visitedBranches),
+            Just closestBranch <- Map.lookupGE pc branches =
+            let visitedBranches' = Set.insert pc visitedBranches
+             in case closestBranch of
+                  (retPc, BbExitDynamic retGprs)
+                    | retGprs == callGprs ->
+                      (visitedBranches', [retPc])
+                  (_, BbExitCondJump brTargetPc1 brTargetPc2) ->
+                    let (visitedBranches'', retPcs') = go visitedBranches' brTargetPc1
+                        (visitedBranches''', retPcs'') = go visitedBranches'' brTargetPc2
+                     in (visitedBranches''', retPcs' ++ retPcs'')
+                  (_, BbExitJump brTargetPc) ->
+                    go visitedBranches' brTargetPc
+                  (_, BbExitTerminal) ->
+                    (visitedBranches', [])
+                  (otherBrPc, _) ->
+                    go visitedBranches' (otherBrPc + 4)
+          | otherwise = (visitedBranches, [])
 
 splitInstructionsIntoBlocks :: Set PC -> Map PC (BasicBlockExitPoint PC) -> [(PC, Instruction)] -> [BasicBlock]
 splitInstructionsIntoBlocks blockLeaders branches instructions = blocks

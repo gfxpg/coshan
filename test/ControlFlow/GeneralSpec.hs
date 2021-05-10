@@ -95,6 +95,7 @@ spec = describe "cfg construction" $ do
               bbExit = BbExitJump 1
             }
         ]
+
   it "recognizes function calls that use s_call_b64" $ do
     (cfg, _) <-
       loadFirstKernel . gfx908Kernel "cfg_s_call" $
@@ -137,7 +138,7 @@ spec = describe "cfg construction" $ do
                   (8, Instruction ["s", "call", "b64"] [Osgpr [10, 11], OConst 10])
                 ],
               bbEntries = [1, 4],
-              bbExit = BbExitJumpSavePc (SgprPair (10,11)) 7
+              bbExit = BbExitJumpSavePc (SgprPair (10, 11)) 7
             },
           BasicBlock -- 1
             { bbInstructions =
@@ -153,12 +154,12 @@ spec = describe "cfg construction" $ do
                   (28, Instruction ["s", "call", "b64"] [Osgpr [10, 11], OConst 5])
                 ],
               bbEntries = [1],
-              bbExit = BbExitJumpSavePc (SgprPair (10,11)) 7
+              bbExit = BbExitJumpSavePc (SgprPair (10, 11)) 7
             },
           BasicBlock -- 3
             { bbInstructions = [(32, Instruction ["s", "call", "b64"] [Osgpr [0, 1], OConst 3])],
               bbEntries = [10],
-              bbExit = BbExitJumpSavePc (SgprPair (0,1)) 6
+              bbExit = BbExitJumpSavePc (SgprPair (0, 1)) 6
             },
           BasicBlock -- 4
             { bbInstructions =
@@ -176,7 +177,7 @@ spec = describe "cfg construction" $ do
           BasicBlock -- 6
             { bbInstructions = [(48, Instruction ["s", "setpc", "b64"] [Osgpr [0, 1]])],
               bbEntries = [3, 8],
-              bbExit = BbExitDynamic (SgprPair (0,1))
+              bbExit = BbExitDynamic (SgprPair (0, 1))
             },
           BasicBlock -- 7
             { bbInstructions =
@@ -190,7 +191,7 @@ spec = describe "cfg construction" $ do
           BasicBlock -- 8
             { bbInstructions = [(64, Instruction ["s", "call", "b64"] [Osgpr [0, 1], OConst 65531])],
               bbEntries = [7],
-              bbExit = BbExitJumpSavePc (SgprPair (0,1)) 6
+              bbExit = BbExitJumpSavePc (SgprPair (0, 1)) 6
             },
           BasicBlock -- 9
             { bbInstructions =
@@ -203,11 +204,62 @@ spec = describe "cfg construction" $ do
           BasicBlock -- 10
             { bbInstructions = [(76, Instruction ["s", "setpc", "b64"] [Osgpr [10, 11]])],
               bbEntries = [7, 9],
-              bbExit = BbExitDynamic (SgprPair (10,11))
+              bbExit = BbExitDynamic (SgprPair (10, 11))
             },
           BasicBlock -- 11
             { bbInstructions = [(80, Instruction ["s", "endpgm"] [])],
               bbEntries = [5],
               bbExit = BbExitTerminal
+            }
+        ]
+
+  it "handles function calls with loops" $ do
+    (cfg, _) <-
+      loadFirstKernel . gfx908Kernel "cfg_s_call_with_loop" $
+        [i|
+          bb0:
+          s_call_b64 s[10:11], fun1
+          s_endpgm
+
+          fun1:
+          s_waitcnt lgkmcnt(0)
+          s_add_u32 s1, s1, -1
+          s_cmp_eq_u32 s1, 0
+          s_cbranch_scc1 fun1_end
+          s_branch fun1
+          fun1_end:
+          s_setpc_b64 s[10:11]
+        |]
+    cfg
+      `shouldBe` CFG
+        [ BasicBlock -- 0
+            { bbInstructions = [(0, Instruction ["s", "call", "b64"] [Osgpr [10, 11], OConst 1])],
+              bbEntries = [],
+              bbExit = BbExitJumpSavePc (SgprPair (10, 11)) 2
+            },
+          BasicBlock -- 1
+            { bbInstructions = [(4, Instruction ["s", "endpgm"] [])],
+              bbEntries = [4],
+              bbExit = BbExitTerminal
+            },
+          BasicBlock -- 2
+            { bbInstructions =
+                [ (8, Instruction ["s", "waitcnt"] [Olgkmcnt 0]),
+                  (12, Instruction ["s", "add", "u32"] [Osgpr [1], Osgpr [1], OConst (-1)]),
+                  (16, Instruction ["s", "cmp", "eq", "u32"] [Osgpr [1], OConst 0]),
+                  (20, Instruction ["s", "cbranch", "scc1"] [OConst 1])
+                ],
+              bbEntries = [0, 3],
+              bbExit = BbExitCondJump 4 3
+            },
+          BasicBlock -- 3
+            { bbInstructions = [(24, Instruction ["s", "branch"] [OConst 65531])],
+              bbEntries = [2],
+              bbExit = BbExitJump 2
+            },
+          BasicBlock -- 4
+            { bbInstructions = [(28, Instruction ["s", "setpc", "b64"] [Osgpr [10, 11]])],
+              bbEntries = [2],
+              bbExit = BbExitDynamic (SgprPair (10, 11))
             }
         ]

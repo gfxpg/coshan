@@ -35,7 +35,9 @@ formatCfg kernel (CFG bbs) = mconcat $ putBb <$> zip [0 ..] bbs
           | otherwise =
             acc <> putInstruction pc i (BStr.length (disasmInstructionsBin kernel) - pc)
         putInstructions [] acc = acc
-        putBbEntries [] = "none (program start)"
+        putBbEntries []
+          | ((0, _) : _) <- insts = "none (program start)"
+          | otherwise = "none (unreachable)"
         putBbEntries e = strJoin ", " (putBbLabel <$> e)
         putBbExit (BbExitCondJump bb1 bb2) = "conditional jump to bb" <> B.intDec bb1 <> " or bb" <> B.intDec bb2
         putBbExit (BbExitJump bb1) = "jump to bb" <> B.intDec bb1
