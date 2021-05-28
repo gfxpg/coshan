@@ -17,11 +17,11 @@ formatCfg kernel (CFG bbs) = mconcat $ putBb <$> zip [0 ..] bbs
   where
     putBb (bbIdx, BasicBlock {bbInstructions = insts, bbEntries = entryIdxs, bbExit = exit}) =
       putBbLabel bbIdx
-        <> ":\t /* predecessors: "
+        <> ": // predecessors: "
         <> putBbEntries entryIdxs
         <> ", exit: "
         <> putBbExit exit
-        <> " */\n"
+        <> "\n"
         <> putInstructions insts ""
         <> ch '\n'
       where

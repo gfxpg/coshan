@@ -51,12 +51,14 @@ getLlvmRef target = do
 disassemble :: LLVMDisasmContextRef -> ByteString -> IO (Either PC [(PC, ByteString)])
 disassemble ctxRef mcodeStr =
   withForeignPtr mcodePtr $ \mcode ->
-    withForeignPtr ctxRef $ \ctx -> do
-      allocaBytes 256 $ \outbuf -> do
+    withForeignPtr ctxRef $ \ctx ->
+      allocaBytes 256 $ \outbuf ->
         let parse pc acc
               | pc >= mcodeLen = return $ Right $ reverse acc
               | otherwise = do
-                instLen <- llvmDisasmInstruction ctx (mcode `plusPtr` pc) (fromIntegral $ mcodeLen - pc) 0 outbuf (CSize 256)
+                let mcodeAtPc = mcode `plusPtr` pc
+                    mcodeAfterPcLen = fromIntegral $ mcodeLen - pc
+                instLen <- llvmDisasmInstruction ctx mcodeAtPc mcodeAfterPcLen 0 outbuf (CSize 256)
                 case instLen of
                   0 -> return $ Left pc
                   _ -> do
@@ -64,6 +66,6 @@ disassemble ctxRef mcodeStr =
                         instructionWithoutLeadingTab = castPtr $ outbuf `plusPtr` 1
                     instruction <- BC8.packCString instructionWithoutLeadingTab
                     parse nextPc ((fromIntegral pc, instruction) : acc)
-        parse 0 []
+         in parse 0 []
   where
     (mcodePtr, mcodeLen) = Data.ByteString.Internal.toForeignPtr0 mcodeStr

@@ -12,23 +12,22 @@ checkWaitStateHazards :: DisassembledKernel -> CFG -> [R.Error]
 checkWaitStateHazards _ (CFG bbs) = go [] bbs
   where
     go log [] = log
-    go log (bb : rest) = go (log ++ analyzeBb (CFG bbs) bb [rwLaneHazardMatcher]) rest
+    go log (bb : rest) = go (log ++ analyzeBb (CFG bbs) bb [rwLaneMatcher]) rest
 
 data WaitStatesIterCtx = WaitStatesIterCtx
   { reverseBbInsts :: [(PC, Instruction)], -- instructions we walk over on this iteration
     predBbIdxs :: [BasicBlockIdx], -- predecessors of the current basic block
-    walkedInsts :: [PC], -- all instructions we walked to reach this point (for better messages in logs)
-    walkedBbIdxs :: [BasicBlockIdx] -- indexes of all basic blocks we visited (to avoid processing the same blocks in loops)
+    walkedInsts :: [PC] -- all instructions we walked to reach this point (for better messages in logs)
   }
 
 newtype WaitStates = WaitStates Int
 
-type DependeeMatcher = Instruction -> Bool
+type HazardMatcher = Instruction -> Bool
 
-type HazardMatcher = Instruction -> Maybe (String, WaitStates, DependeeMatcher)
+type DependentInstructionMatcher = Instruction -> Maybe (String, WaitStates, HazardMatcher)
 
-rwLaneHazardMatcher :: HazardMatcher
-rwLaneHazardMatcher = \case
+rwLaneMatcher :: DependentInstructionMatcher
+rwLaneMatcher = \case
   Instruction ("v" : vop : _) [_dst, _src, Osgpr [selectorGprIdx]]
     | vop == "readlane" || vop == "writelane" ->
       Just
@@ -41,7 +40,7 @@ rwLaneHazardMatcher = \case
         )
   _ -> Nothing
 
-analyzeBb :: CFG -> BasicBlock -> [HazardMatcher] -> [R.Error]
+analyzeBb :: CFG -> BasicBlock -> [DependentInstructionMatcher] -> [R.Error]
 analyzeBb (CFG bbs) currBb matchers = analyzeInstructions ([], bbInstructions currBb) []
   where
     analyzeInstructions (_, []) log = log
@@ -50,7 +49,7 @@ analyzeBb (CFG bbs) currBb matchers = analyzeInstructions ([], bbInstructions cu
         log' = foldl' (\msgs m -> case match m of Just msg -> msg : msgs; _ -> msgs) log matchers
         match m = case m i of
           Just (msg, ws, dp)
-            | iterCtx <- WaitStatesIterCtx {reverseBbInsts = prev, predBbIdxs = bbEntries currBb, walkedInsts = [], walkedBbIdxs = []},
+            | iterCtx <- WaitStatesIterCtx {reverseBbInsts = prev, predBbIdxs = bbEntries currBb, walkedInsts = []},
               Just (WaitStates missingWs, path) <- missingWaitStatesPath ws dp iterCtx ->
               Just $
                 R.Error pc $
@@ -60,7 +59,7 @@ analyzeBb (CFG bbs) currBb matchers = analyzeInstructions ([], bbInstructions cu
                       R.wsreqExplanation = msg
                     }
           _ -> Nothing
-    missingWaitStatesPath :: WaitStates -> DependeeMatcher -> WaitStatesIterCtx -> Maybe (WaitStates, [PC]) -- path to the instruction with missing wait states
+    missingWaitStatesPath :: WaitStates -> HazardMatcher -> WaitStatesIterCtx -> Maybe (WaitStates, [PC]) -- path to the instruction with missing wait states
     missingWaitStatesPath (WaitStates ws) _ _ | ws <= 0 = Nothing
     missingWaitStatesPath (WaitStates ws) dependsOn ctx@WaitStatesIterCtx {reverseBbInsts = ((pc, i) : prevInstsInBb)}
       | dependsOn i = Just (WaitStates ws, pc : walkedInsts ctx)
@@ -69,10 +68,10 @@ analyzeBb (CFG bbs) currBb matchers = analyzeInstructions ([], bbInstructions cu
               Instruction ["s", "nop"] [OConst states] -> 1 + states
               _ -> 1
          in missingWaitStatesPath (WaitStates $ ws - states) dependsOn ctx {reverseBbInsts = prevInstsInBb, walkedInsts = pc : walkedInsts ctx}
-    missingWaitStatesPath ws m ctx@WaitStatesIterCtx {reverseBbInsts = [], predBbIdxs = bbIdxs} =
-      msum $ walkBb <$> bbIdxs
+    missingWaitStatesPath ws m ctx@WaitStatesIterCtx {reverseBbInsts = [], predBbIdxs = predBbIdxs} =
+      msum $ walkBb <$> predBbIdxs
       where
         walkBb i =
-          let bb = bbs !! i
-              bbCtx = ctx {reverseBbInsts = reverse $ bbInstructions bb, predBbIdxs = bbEntries bb, walkedBbIdxs = i : walkedBbIdxs ctx}
+          let BasicBlock {bbInstructions = newInstructions, bbEntries = newPredecessors} = bbs !! i
+              bbCtx = ctx {reverseBbInsts = reverse newInstructions, predBbIdxs = newPredecessors}
            in missingWaitStatesPath ws m bbCtx
