@@ -23,7 +23,7 @@ default-extensions:
 library:
   source-dirs: src
   cc-options: -fPIC
-  extra-libraries: LLVM-11
+  extra-libraries: LLVM-14
 
 executables:
   coshan-exe:

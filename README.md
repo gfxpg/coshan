@@ -8,7 +8,7 @@ of data dependency resolution and manually inserted wait states in AMD GCN/CDNA 
 ## Prerequisites
 
 1. [Stack](https://docs.haskellstack.org/en/stable/README/)
-2. LLVM runtime library (`libLLVM-11.so`; `libLLVM-12.so` should work as well with some minimal changes to `package.yaml`)
+2. LLVM runtime library (`libLLVM-14.so`; other versions will probably work as well with some minimal changes to `package.yaml`)
 
 When using [HLS](https://github.com/haskell/haskell-language-server) for development:
 
